@@ -14,7 +14,7 @@ Copy-Item docker\.env.example docker\.env
 docker compose -f docker\docker-compose.yml up -d --build
 ```
 
-Open `http://localhost:8080`, then sign in with the initial credentials from `docker/config.toml`. Change the default admin password immediately.
+Open `http://localhost:8081`, then sign in with the initial credentials from `docker/config.toml`. Change the default admin password immediately.
 
 ## What is included
 
