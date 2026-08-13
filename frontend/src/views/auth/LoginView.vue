@@ -92,7 +92,7 @@ const initiateSSO = (provider: string) => {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-[#0a0a0b] light:bg-gradient-to-br light:from-gray-50 light:to-gray-100 p-4">
+  <div class="min-h-screen flex items-center justify-center bg-[#0a0a0b] light:bg-[#f7f9f7] p-4">
     <div class="w-full max-w-md rounded-2xl border border-white/[0.08] bg-white/[0.02] backdrop-blur light:bg-white light:border-gray-200 light:shadow-xl">
       <div class="p-8 space-y-1 text-center">
         <div class="flex justify-center mb-4">
@@ -159,12 +159,21 @@ const initiateSSO = (provider: string) => {
         </Button>
       </div>
 
-      <div class="px-8 pb-8">
+      <div class="px-8 pb-8 space-y-3">
         <p class="text-sm text-center text-white/40 light:text-gray-500">
           {{ $t('auth.noAccount') }}
           <RouterLink to="/register" class="text-emerald-400 light:text-emerald-600 hover:underline">
             {{ $t('auth.signUp') }}
           </RouterLink>
+        </p>
+        <p class="text-center text-[11px] leading-4 text-white/35 light:text-gray-400">
+          Vyapari Nestam WhatsApp is distributed under AGPL-3.0.
+          <a
+            href="https://github.com/ramanarao984-create/VyapariNestamWhatsApp"
+            target="_blank"
+            rel="noreferrer"
+            class="text-emerald-400 light:text-emerald-700 hover:underline"
+          >Source and notices</a>
         </p>
       </div>
     </div>
