@@ -1,0 +1,9 @@
+Vyapari Nestam WhatsApp
+
+This project is a modified work based on Whatomate:
+https://github.com/shridarpatil/whatomate
+
+Upstream project copyright belongs to its respective contributors.
+Changes in this distribution include the Vyapari Nestam WhatsApp product identity, light-first visual defaults, local source-built Docker configuration, and deployment documentation.
+
+This work is distributed under the GNU Affero General Public License v3.0. The complete license text is in LICENSE. If this software is made available for use over a network, the corresponding source code of the running version, including modifications, must be offered to its users.
