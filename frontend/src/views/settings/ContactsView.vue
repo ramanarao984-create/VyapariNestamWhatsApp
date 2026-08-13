@@ -206,7 +206,7 @@ function getDisplayName(contact: Contact): string {
               >
                 <template #cell-profile_name="{ item: contact }">
                   <div class="flex flex-col">
-                    <RouterLink :to="`/settings/contacts/${contact.id}`" class="font-medium text-inherit no-underline hover:opacity-80">{{ getDisplayName(contact) }}</RouterLink>
+                    <RouterLink :to="`/contacts/${contact.id}`" class="font-medium text-inherit no-underline hover:opacity-80">{{ getDisplayName(contact) }}</RouterLink>
                     <span v-if="contact.last_message_preview" class="text-xs text-muted-foreground truncate max-w-[200px]">{{ contact.last_message_preview }}</span>
                   </div>
                 </template>
@@ -228,7 +228,7 @@ function getDisplayName(contact: Contact): string {
                 <template #cell-actions="{ item: contact }">
                   <div class="flex items-center justify-end gap-1">
                     <IconButton :icon="MessageSquare" :label="$t('contacts.openChat')" class="h-8 w-8" @click="openChat(contact)" />
-                    <RouterLink :to="`/settings/contacts/${contact.id}`">
+                    <RouterLink :to="`/contacts/${contact.id}`">
                       <IconButton :icon="Pencil" :label="$t('common.edit')" class="h-8 w-8" />
                     </RouterLink>
                     <IconButton :label="$t('common.delete')" class="h-8 w-8" @click="openDeleteDialog(contact)">
