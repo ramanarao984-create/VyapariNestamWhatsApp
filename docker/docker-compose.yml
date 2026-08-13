@@ -1,7 +1,10 @@
 services:
-  # Whatomate app
+  # Vyapari Nestam WhatsApp app
   app:
-    image: shridh0r/whatomate:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: vyapari-nestam-whatsapp:local
     container_name: whatomate_app
     restart: unless-stopped
     ports:

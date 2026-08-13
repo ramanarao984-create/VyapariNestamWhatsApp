@@ -4,13 +4,13 @@
     <meta charset="UTF-8">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Whatomate - WhatsApp Business Platform">
-    <title>Whatomate</title>
+    <meta name="description" content="Vyapari Nestam WhatsApp - WhatsApp business communication workspace">
+    <title>Vyapari Nestam WhatsApp</title>
     <script>
       (function() {
         var mode = localStorage.getItem('color-mode');
-        var isDark = mode === 'dark' || (mode === 'system' || !mode) && window.matchMedia('(prefers-color-scheme: dark)').matches;
-        if (isDark) document.documentElement.classList.add('dark');
+        var isDark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.classList.add(isDark ? 'dark' : 'light');
       })();
     </script>
   </head>
