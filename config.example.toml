@@ -21,9 +21,9 @@ allowed_origins = ""  # Comma-separated CORS origins (e.g., "https://app.example
 [database]
 host = "db"  # Use "localhost" for local development
 port = 5432
-user = "whatomate"
-password = "whatomate"
-name = "whatomate"
+user = "vyapari_nestam_whatsapp"
+password = "vyapari_nestam_whatsapp"
+name = "vyapari_nestam_whatsapp"
 ssl_mode = "disable"
 max_open_conns = 25
 max_idle_conns = 5

@@ -5,12 +5,12 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     image: vyapari-nestam-whatsapp:local
-    container_name: whatomate_app
+    container_name: vyapari_nestam_whatsapp_app
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "${APP_PORT:-8081}:8080"
     networks:
-      - whatomate
+      - vyapari_nestam_whatsapp
     depends_on:
       db:
         condition: service_healthy
@@ -26,44 +26,44 @@ services:
   # PostgreSQL database
   db:
     image: postgres:17-alpine
-    container_name: whatomate_db
+    container_name: vyapari_nestam_whatsapp_db
     restart: unless-stopped
     networks:
-      - whatomate
+      - vyapari_nestam_whatsapp
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-whatomate}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-whatomate}
-      POSTGRES_DB: ${POSTGRES_DB:-whatomate}
+      POSTGRES_USER: ${POSTGRES_USER:-vyapari_nestam_whatsapp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vyapari_nestam_whatsapp}
+      POSTGRES_DB: ${POSTGRES_DB:-vyapari_nestam_whatsapp}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-whatomate} -d ${POSTGRES_DB:-whatomate}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vyapari_nestam_whatsapp} -d ${POSTGRES_DB:-vyapari_nestam_whatsapp}"]
       interval: 10s
       timeout: 5s
       retries: 6
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - vyapari-nestam-whatsapp-postgres-data:/var/lib/postgresql/data
 
   # Redis
   redis:
     image: redis:7-alpine
-    container_name: whatomate_redis
+    container_name: vyapari_nestam_whatsapp_redis
     restart: unless-stopped
     networks:
-      - whatomate
+      - vyapari_nestam_whatsapp
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:${REDIS_PORT:-6380}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     volumes:
-      - redis-data:/data
+      - vyapari-nestam-whatsapp-redis-data:/data
 
 networks:
-  whatomate:
+  vyapari_nestam_whatsapp:
 
 volumes:
-  postgres-data:
-  redis-data:
+  vyapari-nestam-whatsapp-postgres-data:
+  vyapari-nestam-whatsapp-redis-data:
