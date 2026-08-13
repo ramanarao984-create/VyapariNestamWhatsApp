@@ -280,6 +280,15 @@ const handleLogout = async () => {
 
       <!-- User Menu -->
       <UserMenu :collapsed="isCollapsed" @logout="handleLogout" />
+      <a
+        v-if="!isCollapsed"
+        href="https://github.com/ramanarao984-create/VyapariNestamWhatsApp"
+        target="_blank"
+        rel="noreferrer"
+        class="px-3 pb-2 text-[10px] text-white/30 hover:text-white/60 light:text-gray-400 light:hover:text-gray-700"
+      >
+        AGPL-3.0 source and notices
+      </a>
     </aside>
 
     <!-- Main content -->
