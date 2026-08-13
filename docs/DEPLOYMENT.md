@@ -10,7 +10,7 @@ Copy-Item docker\.env.example docker\.env
 docker compose -f docker\docker-compose.yml up -d --build
 ```
 
-The Compose file builds `docker/Dockerfile` from the checked-out source. This is important: UI and feature changes in this repository are included in the container image.
+Open `http://localhost:8081` after the services report healthy.\n\nThe Compose file builds `docker/Dockerfile` from the checked-out source. This is important: UI and feature changes in this repository are included in the container image.
 
 ## Production baseline
 
