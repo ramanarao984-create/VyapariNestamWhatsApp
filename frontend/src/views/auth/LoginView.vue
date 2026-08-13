@@ -95,10 +95,14 @@ const initiateSSO = (provider: string) => {
   <div class="min-h-screen flex items-center justify-center bg-[#0a0a0b] light:bg-[#f7f9f7] p-4">
     <div class="w-full max-w-md rounded-2xl border border-white/[0.08] bg-white/[0.02] backdrop-blur light:bg-white light:border-gray-200 light:shadow-xl">
       <div class="p-8 space-y-1 text-center">
-        <div class="flex justify-center mb-4">
-          <img src="/vyapari-nestam-mark.svg" class="h-12 w-12" alt="Vyapari Nestam WhatsApp" />
+        <div class="flex justify-center mb-3">
+          <img
+            src="/brand/vyapari-nestam-logo-final.png"
+            class="h-auto w-full max-w-[260px] object-contain"
+            alt="Vyapari Nestam - Your business friend. Your growth partner."
+          />
         </div>
-        <h2 class="text-2xl font-bold text-white light:text-gray-900">{{ $t('auth.welcomeTitle') }}</h2>
+        <h2 class="text-xl font-bold text-white light:text-gray-900">{{ $t('auth.welcomeTitle') }}</h2>
         <p class="text-white/50 light:text-gray-500">
           {{ $t('auth.welcomeSubtitle') }}
         </p>
