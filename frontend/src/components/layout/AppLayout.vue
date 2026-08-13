@@ -6,7 +6,6 @@ import { useAuthStore } from '@/stores/auth'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
-  MessageSquare,
   ChevronLeft,
   ChevronRight,
   Menu,
@@ -110,10 +109,8 @@ const handleLogout = async () => {
     <!-- Mobile header -->
     <header class="fixed top-0 left-0 right-0 z-50 flex h-12 items-center justify-between border-b border-white/[0.08] light:border-gray-200 bg-[#0a0a0b]/95 light:bg-white/95 backdrop-blur-sm px-3 md:hidden">
       <RouterLink to="/" class="flex items-center gap-2">
-        <div class="h-7 w-7 rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-          <MessageSquare class="h-4 w-4 text-white" />
-        </div>
-        <span class="font-semibold text-sm text-white light:text-gray-900">Whatomate</span>
+        <img src="/vyapari-nestam-mark.svg" class="h-7 w-7 shrink-0" alt="" aria-hidden="true" />
+        <span class="font-semibold text-[11px] text-white light:text-gray-900">Vyapari Nestam WhatsApp</span>
       </RouterLink>
       <Button
         variant="ghost"
@@ -150,14 +147,12 @@ const handleLogout = async () => {
       <!-- Logo (hidden on mobile, shown in header instead) -->
       <div class="hidden md:flex h-12 items-center justify-between px-3 border-b border-white/[0.08] light:border-gray-200">
         <RouterLink to="/" class="flex items-center gap-2">
-          <div class="h-7 w-7 rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-            <MessageSquare class="h-4 w-4 text-white" />
-          </div>
+          <img src="/vyapari-nestam-mark.svg" class="h-7 w-7 shrink-0" alt="" aria-hidden="true" />
           <span
             v-if="!isCollapsed"
             class="font-semibold text-sm text-white light:text-gray-900"
           >
-            Whatomate
+            Vyapari Nestam WhatsApp
           </span>
         </RouterLink>
         <Button
