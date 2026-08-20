@@ -1119,6 +1119,30 @@ func TestApp_SendMessage(t *testing.T) {
 	})
 }
 
+func TestApp_SendMessage_RejectsClosedServiceWindow(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+	past := time.Now().Add(-24*time.Hour - time.Second)
+	require.NoError(t, app.DB.Model(contact).Update("last_inbound_at", past).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"type": "text",
+		"content": map[string]string{
+			"body": "This must not be delivered",
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	require.NoError(t, app.SendMessage(req))
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+	assert.Contains(t, string(testutil.GetResponseBody(req)), "24-hour customer service window")
+}
+
 // --- SendReaction Tests ---
 
 func TestApp_SendReaction(t *testing.T) {

@@ -13,7 +13,7 @@ import { PageHeader, AuditLogPanel } from '@/components/shared'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 import { toast } from 'vue-sonner'
 import { Settings, Bell, Loader2, Globe, Phone, Upload, Play, Pause, Music } from 'lucide-vue-next'
-import { usersService, organizationService } from '@/services/api'
+import { usersService, organizationService, outgoingCallsService, type CallingReadinessCheck } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
@@ -69,6 +69,8 @@ const holdMusicAudio = ref<HTMLAudioElement | null>(null)
 const ringbackAudio = ref<HTMLAudioElement | null>(null)
 const playingHoldMusic = ref(false)
 const playingRingback = ref(false)
+const isReadinessLoading = ref(true)
+const callingReadiness = ref<{ ready: boolean; checks: CallingReadinessCheck[] } | null>(null)
 
 // Bump these keys to force the AuditLogPanel to remount and refetch after a save.
 // The backend writes audit entries asynchronously in a goroutine, so we delay
@@ -83,9 +85,10 @@ function refreshActivityLog(key: typeof generalLogKey) {
 
 onMounted(async () => {
   try {
-    const [orgResponse, userResponse] = await Promise.all([
+    const [orgResponse, userResponse, readinessResponse] = await Promise.all([
       organizationService.getSettings(),
-      usersService.me()
+      usersService.me(),
+      outgoingCallsService.getReadiness().catch(() => null)
     ])
 
     // Organization settings
@@ -119,12 +122,29 @@ onMounted(async () => {
         campaign_updates: user.settings.campaign_updates ?? true
       }
     }
+    if (readinessResponse) {
+      const readiness = readinessResponse.data.data || readinessResponse.data
+      callingReadiness.value = readiness
+    }
   } catch (error) {
     console.error('Failed to load settings:', error)
   } finally {
     isLoading.value = false
+    isReadinessLoading.value = false
   }
 })
+
+async function refreshCallingReadiness() {
+  isReadinessLoading.value = true
+  try {
+    const response = await outgoingCallsService.getReadiness()
+    callingReadiness.value = response.data.data || response.data
+  } catch {
+    toast.error('Unable to check calling readiness')
+  } finally {
+    isReadinessLoading.value = false
+  }
+}
 
 async function saveGeneralSettings() {
   isSubmitting.value = true
@@ -187,6 +207,7 @@ async function saveCallingSettings() {
     })
     toast.success(t('settings.callingSaved'))
     refreshActivityLog(callingLogKey)
+    await refreshCallingReadiness()
   } catch (error) {
     toast.error(t('common.failedSave', { resource: t('resources.settings') }))
   } finally {
@@ -555,6 +576,32 @@ function togglePlayAudio(type: 'hold_music' | 'ringback') {
                   </Button>
                 </div>
               </div>
+            </div>
+            <div class="mt-4 rounded-xl border border-white/[0.08] bg-white/[0.02] p-6 light:bg-white light:border-gray-200">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <h3 class="text-lg font-semibold text-white light:text-gray-900">Calling readiness</h3>
+                  <p class="text-sm text-white/40 light:text-gray-500">Check the server, WhatsApp account, TURN relay, and network prerequisites before launch.</p>
+                </div>
+                <Button variant="outline" size="sm" class="shrink-0 bg-white/[0.04] border-white/[0.1] text-white/70 hover:bg-white/[0.08] hover:text-white light:bg-white light:border-gray-200 light:text-gray-700 light:hover:bg-gray-50" @click="refreshCallingReadiness" :disabled="isReadinessLoading">
+                  <Loader2 v-if="isReadinessLoading" class="mr-2 h-4 w-4 animate-spin" />
+                  Refresh
+                </Button>
+              </div>
+              <div v-if="callingReadiness" class="mt-4 space-y-2">
+                <p class="text-sm font-medium" :class="callingReadiness.ready ? 'text-emerald-400' : 'text-amber-400'">
+                  {{ callingReadiness.ready ? 'Local calling configuration is ready.' : 'Resolve the items below before launch.' }}
+                </p>
+                <div v-for="check in callingReadiness.checks" :key="check.name" class="rounded-lg border px-3 py-2 text-sm" :class="{
+                  'border-emerald-500/25 bg-emerald-500/10 text-emerald-200': check.status === 'pass',
+                  'border-amber-500/25 bg-amber-500/10 text-amber-100': check.status === 'warning',
+                  'border-red-500/25 bg-red-500/10 text-red-100': check.status === 'error'
+                }">
+                  {{ check.message }}
+                </div>
+                <p class="pt-1 text-xs text-white/35 light:text-gray-500">Meta enrollment and public webhook delivery must be verified in Meta; this screen does not treat local settings as proof of approval.</p>
+              </div>
+              <p v-else-if="!isReadinessLoading" class="mt-4 text-sm text-white/40 light:text-gray-500">The readiness check is unavailable for your current permissions.</p>
             </div>
             <div v-if="orgID" class="mt-4">
               <AuditLogPanel :key="callingLogKey" resource-type="settings.calling" :resource-id="orgID" />

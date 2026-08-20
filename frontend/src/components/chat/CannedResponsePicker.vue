@@ -14,6 +14,7 @@ import { MessageSquareText, Search, Loader2 } from 'lucide-vue-next'
 const props = defineProps<{
   externalOpen?: boolean
   externalSearch?: string
+  disabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -103,6 +104,7 @@ function getCategoryLabel(category: string): string {
 }
 
 function selectResponse(response: CannedResponse) {
+  if (props.disabled) return
   emit('select', response)
   isOpen.value = false
   searchQuery.value = ''
@@ -112,7 +114,7 @@ function selectResponse(response: CannedResponse) {
 <template>
   <Popover v-model:open="isOpen">
     <PopoverTrigger as-child>
-      <Button id="canned-response-picker-button" type="button" variant="ghost" size="icon">
+      <Button id="canned-response-picker-button" type="button" variant="ghost" size="icon" :disabled="disabled">
         <MessageSquareText class="h-5 w-5" />
       </Button>
     </PopoverTrigger>

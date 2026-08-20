@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha1" //nolint:gosec // SHA-1 is mandated by the coturn TURN REST API (RFC draft)
 	"encoding/base64"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -94,7 +95,10 @@ type CallingConfig struct {
 	PublicIP            string            `koanf:"public_ip"`    // Public IP for NAT mapping (required on AWS/cloud)
 	RelayOnly           bool              `koanf:"relay_only"`   // Force all media through TURN relay (no direct UDP)
 	ICEServers          []ICEServerConfig `koanf:"ice_servers"`
-	RecordingEnabled    bool              `koanf:"recording_enabled"` // Enable call recording to S3
+	RecordingEnabled         bool              `koanf:"recording_enabled"`          // Enable call recording to S3
+	RecordingRetentionDays   int               `koanf:"recording_retention_days"`   // 0 disables cleanup
+	RecordingRetentionAction string            `koanf:"recording_retention_action"` // delete or archive
+	RecordingArchivePrefix   string            `koanf:"recording_archive_prefix"`   // defaults to recordings-archive
 }
 
 type AppConfig struct {
@@ -156,12 +160,16 @@ type AIConfig struct {
 }
 
 type StorageConfig struct {
-	Type      string `koanf:"type"` // local, s3
-	LocalPath string `koanf:"local_path"`
-	S3Bucket  string `koanf:"s3_bucket"`
-	S3Region  string `koanf:"s3_region"`
-	S3Key     string `koanf:"s3_key"`
-	S3Secret  string `koanf:"s3_secret"`
+	Type             string `koanf:"type"` // local, s3
+	LocalPath        string `koanf:"local_path"`
+	S3Bucket         string `koanf:"s3_bucket"`
+	S3Region         string `koanf:"s3_region"`
+	S3Key            string `koanf:"s3_key"`
+	S3Secret         string `koanf:"s3_secret"`
+	S3Endpoint               string `koanf:"s3_endpoint"`                // optional S3-compatible endpoint
+	S3ForcePathStyle         bool   `koanf:"s3_force_path_style"`        // required by some compatible providers
+	S3ServerSideEncryption   string `koanf:"s3_server_side_encryption"`  // AES256 or aws:kms
+	S3KMSKeyID               string `koanf:"s3_kms_key_id"`              // required for a customer-managed KMS key
 }
 
 type DefaultAdminConfig struct {
@@ -222,6 +230,55 @@ func Load(configPath string) (*Config, error) {
 	setDefaults(&cfg)
 
 	return &cfg, nil
+}
+
+// ValidateProductionSecrets rejects empty and known example credentials before
+// a production process can connect to external services or accept requests.
+// Error messages intentionally contain field names only, never secret values.
+func ValidateProductionSecrets(cfg *Config) error {
+	if cfg == nil || strings.ToLower(strings.TrimSpace(cfg.App.Environment)) != "production" {
+		return nil
+	}
+
+	checks := []struct {
+		name  string
+		value string
+	}{
+		{"app.encryption_key", cfg.App.EncryptionKey},
+		{"jwt.secret", cfg.JWT.Secret},
+		{"database.password", cfg.Database.Password},
+	}
+
+	var invalid []string
+	for _, check := range checks {
+		if isPlaceholderSecret(check.value) {
+			invalid = append(invalid, check.name)
+		}
+	}
+	if len(invalid) > 0 {
+		return fmt.Errorf("production secrets must be replaced for: %s", strings.Join(invalid, ", "))
+	}
+	return nil
+}
+
+func isPlaceholderSecret(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		return true
+	}
+
+	switch normalized {
+	case "admin", "password", "postgres", "whatomate", "vyapari_nestam_whatsapp",
+		"change-me", "change-me-in-production", "replace-me", "example", "placeholder",
+		"your-super-secret-jwt-key-change-in-production":
+		return true
+	}
+
+	return strings.Contains(normalized, "change-in-production") ||
+		strings.Contains(normalized, "replace-in-production") ||
+		strings.HasPrefix(normalized, "your-") ||
+		strings.HasPrefix(normalized, "example-") ||
+		strings.HasPrefix(normalized, "placeholder-")
 }
 
 func setDefaults(cfg *Config) {

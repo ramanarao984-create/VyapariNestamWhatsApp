@@ -887,6 +887,10 @@ function handleCannedSelect(response: CannedResponse) {
 
 async function sendCannedResponse() {
   if (!contactsStore.currentContact || !selectedCannedResponse.value) return
+  if (isServiceWindowExpired.value) {
+    toast.error(t('chat.serviceWindowExpired'))
+    return
+  }
 
   const missing = cannedParamNames.value.some(n => !cannedParamValues.value[n]?.trim())
   if (missing) {
@@ -896,87 +900,14 @@ async function sendCannedResponse() {
 
   const body = cannedPreview.value
   const responseId = selectedCannedResponse.value.id
-  // Substitute {{...}} tokens in every button field — same rules as the body —
-  // so URLs like https://x.com/u/{{phone_number}} resolve at send time.
-  const buttons = (selectedCannedResponse.value.buttons || []).map(b => ({
-    ...b,
-    title: resolveCannedTokens(b.title),
-    ...(b.url !== undefined ? { url: resolveCannedTokens(b.url) } : {}),
-    ...(b.phone_number !== undefined ? { phone_number: resolveCannedTokens(b.phone_number) } : {}),
-  }))
-  const replyButtons = buttons.filter(b => !b.type || b.type === 'reply')
-  const urlButtons = buttons.filter(b => b.type === 'url')
-
-  // WhatsApp Cloud API supports: 1-3 reply buttons (interactive.button),
-  // 4-10 reply rows (interactive.list — backend's SendInteractiveButtons
-  // auto-picks the right shape), a single cta_url, or a single voice_call
-  // (Business Calling click-to-call). Phone buttons and multi-URL / mixed
-  // combos aren't representable; the detail-page validator blocks save for
-  // those, so the text fallback here is just a safety net.
-  const voiceCallButtons = buttons.filter(b => b.type === 'voice_call')
-  const flowButtons = buttons.filter(b => b.type === 'flow')
-  let sendType: 'text' | 'interactive' = 'text'
-  let interactive: {
-    type: 'button' | 'list' | 'cta_url' | 'voice_call' | 'flow'
-    body: string
-    buttons?: Array<{ id: string; title: string }>
-    button_text?: string
-    url?: string
-    display_text?: string
-    ttl_minutes?: number
-    flow_id?: string
-    first_screen?: string
-  } | undefined
-
-  if (buttons.length === 1 && flowButtons.length === 1) {
-    const f = flowButtons[0]
-    sendType = 'interactive'
-    interactive = {
-      type: 'flow',
-      body,
-      // The button title is the CTA label shown to the customer.
-      button_text: resolveCannedTokens(f.title),
-      flow_id: f.flow_id,
-      first_screen: f.screen,
-    }
-  } else if (buttons.length === 1 && voiceCallButtons.length === 1) {
-    const vc = voiceCallButtons[0]
-    sendType = 'interactive'
-    interactive = {
-      type: 'voice_call',
-      body,
-      // {{...}} tokens already resolved in the canned-preview path; the
-      // button title is what becomes Meta's display_text. Backend
-      // truncates to 20 chars and stamps the agent-id payload.
-      display_text: resolveCannedTokens(vc.title),
-      ttl_minutes: vc.ttl_minutes ?? 15,
-    }
-  } else if (buttons.length > 0 && replyButtons.length === buttons.length && replyButtons.length <= 10) {
-    sendType = 'interactive'
-    interactive = {
-      type: replyButtons.length <= 3 ? 'button' : 'list',
-      body,
-      buttons: replyButtons.map(b => ({ id: b.id, title: b.title })),
-    }
-  } else if (buttons.length === 1 && urlButtons.length === 1) {
-    sendType = 'interactive'
-    interactive = {
-      type: 'cta_url',
-      body,
-      button_text: urlButtons[0].title,
-      url: urlButtons[0].url || '',
-    }
-  }
-
   isSendingCanned.value = true
   try {
     await contactsStore.sendMessage(
       contactsStore.currentContact.id,
-      sendType,
-      sendType === 'interactive' ? { body } : { body },
+      'text',
+      { body },
       contactsStore.replyingTo?.id,
       selectedAccount.value || undefined,
-      interactive ? { interactive } : undefined,
     )
     cannedResponsesService.use(responseId).catch(() => {})
     contactsStore.clearReplyingTo()
@@ -2489,6 +2420,7 @@ async function sendMediaMessage() {
                   <CannedResponsePicker
                     :external-open="cannedPickerOpen"
                     :external-search="cannedSearchQuery"
+                    :disabled="isServiceWindowExpired"
                     @select="handleCannedSelect"
                     @close="closeCannedPicker"
                   />

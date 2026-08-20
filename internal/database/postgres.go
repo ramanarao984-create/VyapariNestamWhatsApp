@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shridarpatil/whatomate/internal/config"
+	appcrypto "github.com/shridarpatil/whatomate/internal/crypto"
 	"github.com/shridarpatil/whatomate/internal/models"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
@@ -130,15 +131,14 @@ func AutoMigrate(db *gorm.DB) error {
 }
 
 // RunMigrationWithProgress runs migrations with a progress bar display
-func RunMigrationWithProgress(db *gorm.DB, adminCfg *config.DefaultAdminConfig) error {
+func RunMigrationWithProgress(db *gorm.DB, adminCfg *config.DefaultAdminConfig, encryptionKey string) error {
 	// Silence GORM logging during migration
 	silentDB := db.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)})
 
-	migrationModels := GetMigrationModels()
 	indexes := getIndexes()
 
-	// Total steps: models + indexes + default admin check
-	totalSteps := len(migrationModels) + len(indexes) + 1
+	// Total steps: versioned schema + indexes + default admin check
+	totalSteps := len(indexes) + 2
 	currentStep := 0
 	barWidth := 40
 
@@ -154,15 +154,13 @@ func RunMigrationWithProgress(db *gorm.DB, adminCfg *config.DefaultAdminConfig) 
 
 	fmt.Println()
 
-	// Migrate models
-	for _, m := range migrationModels {
-		printProgress(currentStep, totalSteps)
-		if err := silentDB.AutoMigrate(m.Model); err != nil {
-			fmt.Printf("\n  \033[31m✗ Migration failed: %s\033[0m\n\n", m.Name)
-			return fmt.Errorf("failed to migrate %s: %w", m.Name, err)
-		}
-		currentStep++
+	// Apply the embedded, versioned SQL schema. AutoMigrate is intentionally
+	// not part of the production migration path.
+	if err := RunVersionedMigrations(silentDB); err != nil {
+		fmt.Printf("\n  Versioned migration failed\n\n")
+		return err
 	}
+	currentStep++
 
 	// Create indexes
 	for _, idx := range indexes {
@@ -214,10 +212,47 @@ func RunMigrationWithProgress(db *gorm.DB, adminCfg *config.DefaultAdminConfig) 
 		return err
 	}
 
+	// Encrypt legacy chatbot AI provider keys that predate at-rest encryption.
+	// This is idempotent: already-encrypted and empty values are left untouched.
+	if err := BackfillChatbotAIAPIKeys(silentDB, encryptionKey); err != nil {
+		fmt.Printf("\n  \033[31m✗ Failed to encrypt chatbot AI API keys\033[0m\n\n")
+		return err
+	}
+
 	printProgress(currentStep, totalSteps)
 	fmt.Printf("\n  \033[32m✓ Migration completed\033[0m\n\n")
 
 	return nil
+}
+
+// BackfillChatbotAIAPIKeys encrypts legacy plaintext AI provider keys in place.
+// It can be safely re-run during upgrades because enc:-prefixed values are skipped.
+func BackfillChatbotAIAPIKeys(db *gorm.DB, encryptionKey string) error {
+	if encryptionKey == "" {
+		return nil
+	}
+
+	var settings []models.ChatbotSettings
+	if err := db.Select("id", "ai_api_key").
+		Where("ai_api_key IS NOT NULL AND ai_api_key <> '' AND ai_api_key NOT LIKE ?", "enc:%").
+		Find(&settings).Error; err != nil {
+		return fmt.Errorf("find plaintext chatbot AI API keys: %w", err)
+	}
+
+	return db.Transaction(func(tx *gorm.DB) error {
+		for _, setting := range settings {
+			encrypted, err := appcrypto.Encrypt(setting.AI.APIKey, encryptionKey)
+			if err != nil {
+				return fmt.Errorf("encrypt chatbot AI API key for settings %s: %w", setting.ID, err)
+			}
+			if err := tx.Model(&models.ChatbotSettings{}).
+				Where("id = ?", setting.ID).
+				Update("ai_api_key", encrypted).Error; err != nil {
+				return fmt.Errorf("update chatbot AI API key for settings %s: %w", setting.ID, err)
+			}
+		}
+		return nil
+	})
 }
 
 // repeatChar repeats a character n times

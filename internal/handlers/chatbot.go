@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shridarpatil/whatomate/internal/audit"
+	appcrypto "github.com/shridarpatil/whatomate/internal/crypto"
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -415,7 +416,12 @@ func (a *App) UpdateChatbotSettings(r *fastglue.Request) error {
 		settings.AI.Provider = *req.AIProvider
 	}
 	if req.AIAPIKey != nil && *req.AIAPIKey != "" {
-		settings.AI.APIKey = *req.AIAPIKey
+		encryptedAPIKey, err := appcrypto.Encrypt(*req.AIAPIKey, a.Config.App.EncryptionKey)
+		if err != nil {
+			a.Log.Error("Failed to encrypt AI API key", "error", err)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save AI configuration", nil, "")
+		}
+		settings.AI.APIKey = encryptedAPIKey
 	}
 	if req.AIModel != nil {
 		settings.AI.Model = *req.AIModel

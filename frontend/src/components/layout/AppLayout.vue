@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -26,8 +26,41 @@ const router = useRouter()
 const authStore = useAuthStore()
 const isCollapsed = ref(false)
 const isMobileMenuOpen = ref(false)
+const expandedItems = ref<Record<string, boolean>>({})
 
 // Refresh user data and connect WebSocket on mount
+const isSubmenuExpanded = (item: { path: string; active: boolean }) =>
+  expandedItems.value[item.path] ?? item.active
+
+const handleNavItemClick = (
+  event: MouseEvent,
+  item: { path: string; active: boolean; children?: unknown[] },
+) => {
+  if (item.children?.length) {
+    if (item.active) {
+      event.preventDefault()
+      expandedItems.value[item.path] = !isSubmenuExpanded(item)
+    } else {
+      expandedItems.value[item.path] = true
+    }
+  }
+
+  isMobileMenuOpen.value = false
+}
+
+watch(
+  () => route.path,
+  () => {
+    for (const section of [...mainSections.value, ...bottomSections.value]) {
+      for (const item of section.items) {
+        if (item.children?.length) {
+          expandedItems.value[item.path] = item.active
+        }
+      }
+    }
+  },
+)
+
 onMounted(() => {
   if (authStore.isAuthenticated) {
     // Fetch fresh permissions in background (non-destructive — interceptor handles 401)
@@ -201,14 +234,23 @@ const handleLogout = async () => {
                   :data-active="item.active"
                   role="menuitem"
                   :aria-current="item.active ? 'page' : undefined"
-                  @click="isMobileMenuOpen = false"
+                  :aria-expanded="item.children?.length ? isSubmenuExpanded(item) : undefined"
+                  @click="handleNavItemClick($event, item)"
                 >
                   <component :is="item.icon" class="h-4 w-4 shrink-0" aria-hidden="true" />
                   <span :class="isCollapsed && 'md:sr-only'">{{ $t(item.name) }}</span>
+                  <ChevronRight
+                    v-if="item.children?.length && !isCollapsed"
+                    :class="[
+                      'ml-auto h-3.5 w-3.5 shrink-0 transition-transform duration-200',
+                      isSubmenuExpanded(item) && 'rotate-90'
+                    ]"
+                    aria-hidden="true"
+                  />
                 </RouterLink>
 
                 <!-- Submenu items -->
-                <template v-if="item.children && item.active && !isCollapsed">
+                <template v-if="item.children && isSubmenuExpanded(item) && !isCollapsed">
                   <RouterLink
                     v-for="child in item.children"
                     :key="child.path"
@@ -249,13 +291,22 @@ const handleLogout = async () => {
               :data-active="item.active"
               role="menuitem"
               :aria-current="item.active ? 'page' : undefined"
-              @click="isMobileMenuOpen = false"
+              :aria-expanded="item.children?.length ? isSubmenuExpanded(item) : undefined"
+              @click="handleNavItemClick($event, item)"
             >
               <component :is="item.icon" class="h-4 w-4 shrink-0" aria-hidden="true" />
               <span :class="isCollapsed && 'md:sr-only'">{{ $t(item.name) }}</span>
+              <ChevronRight
+                v-if="item.children?.length && !isCollapsed"
+                :class="[
+                  'ml-auto h-3.5 w-3.5 shrink-0 transition-transform duration-200',
+                  isSubmenuExpanded(item) && 'rotate-90'
+                ]"
+                aria-hidden="true"
+              />
             </RouterLink>
 
-            <template v-if="item.children && item.active && !isCollapsed">
+            <template v-if="item.children && isSubmenuExpanded(item) && !isCollapsed">
               <RouterLink
                 v-for="child in item.children"
                 :key="child.path"

@@ -46,3 +46,14 @@ func TestNewS3Client_AcceptsStaticCredentials(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, c)
 }
+
+func TestNewS3Client_AcceptsS3CompatibleEndpoint(t *testing.T) {
+	c, err := storage.NewS3Client(&config.StorageConfig{
+		S3Bucket:         "backups",
+		S3Region:         "auto",
+		S3Endpoint:       "https://minio.example.test",
+		S3ForcePathStyle: true,
+	})
+	require.NoError(t, err)
+	assert.NotNil(t, c)
+}

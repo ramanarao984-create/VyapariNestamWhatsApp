@@ -2,18 +2,28 @@ package handlers
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shridarpatil/whatomate/internal/config"
+	appcrypto "github.com/shridarpatil/whatomate/internal/crypto"
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/shridarpatil/whatomate/pkg/whatsapp"
 	"github.com/shridarpatil/whatomate/test/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
 
 // newProcessorTestApp creates a minimal App suitable for chatbot processor tests.
 // It connects to the test database and Redis, provides a mock WhatsApp client,
@@ -50,6 +60,63 @@ func createProcessorTestOrg(t *testing.T, app *App) (*models.Organization, *mode
 	org := testutil.CreateTestOrganization(t, app.DB)
 	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
 	return org, account
+}
+
+func TestChatbotAIAPIKey_EncryptedAtRestAndUsedDecrypted(t *testing.T) {
+	app := newProcessorTestApp(t)
+	if app.Redis == nil {
+		t.Skip("TEST_REDIS_URL not set, skipping chatbot cache test")
+	}
+
+	const encryptionKey = "chatbot-runtime-test-encryption-key"
+	const plaintextAPIKey = "sk-chatbot-provider-secret"
+	app.Config = &config.Config{App: config.AppConfig{EncryptionKey: encryptionKey}}
+
+	org, account := createProcessorTestOrg(t, app)
+	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"ai_enabled":    true,
+		"ai_provider":   "openai",
+		"ai_api_key":    plaintextAPIKey,
+		"ai_model":      "gpt-test",
+		"ai_max_tokens": 64,
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	require.NoError(t, app.UpdateChatbotSettings(req))
+
+	var rawAPIKey string
+	require.NoError(t, app.DB.Raw(
+		"SELECT ai_api_key FROM chatbot_settings WHERE organization_id = ? AND whats_app_account = ''",
+		org.ID,
+	).Row().Scan(&rawAPIKey))
+	assert.True(t, appcrypto.IsEncrypted(rawAPIKey))
+	assert.NotEqual(t, plaintextAPIKey, rawAPIKey)
+
+	settings, err := app.getChatbotSettingsCached(org.ID, account.Name)
+	require.NoError(t, err)
+	assert.Equal(t, plaintextAPIKey, settings.AI.APIKey)
+
+	// Load again to exercise decryption of the encrypted Redis cache value.
+	settings, err = app.getChatbotSettingsCached(org.ID, account.Name)
+	require.NoError(t, err)
+	assert.Equal(t, plaintextAPIKey, settings.AI.APIKey)
+
+	app.HTTPClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		assert.Equal(t, "api.openai.com", req.URL.Host)
+		assert.Equal(t, "Bearer "+plaintextAPIKey, req.Header.Get("Authorization"))
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(
+				`{"choices":[{"message":{"content":"Decrypted chatbot reply"}}]}`,
+			)),
+			Request: req,
+		}, nil
+	})}
+
+	response, err := app.generateAIResponse(settings, nil, "Hello")
+	require.NoError(t, err)
+	assert.Equal(t, "Decrypted chatbot reply", response)
 }
 
 // =============================================================================

@@ -542,6 +542,18 @@ type ButtonContent struct {
 	Title string `json:"title"`
 }
 
+// requireOpenServiceWindow prevents free-form outbound messages from being
+// sent after WhatsApp's customer-service window closes. Approved templates
+// use their dedicated handler and are intentionally not routed through this
+// guard.
+func requireOpenServiceWindow(r *fastglue.Request, contact *models.Contact) error {
+	if contact != nil && contact.LastInboundAt != nil && time.Since(*contact.LastInboundAt) < 24*time.Hour {
+		return nil
+	}
+	return r.SendErrorEnvelope(fasthttp.StatusForbidden,
+		"The 24-hour customer service window is closed. Send an approved template instead.", nil, "")
+}
+
 // SendMessage sends a message to a contact
 // Agents can only send messages to their assigned contacts
 func (a *App) SendMessage(r *fastglue.Request) error {
@@ -567,7 +579,6 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
-
 	// Get WhatsApp account - prefer request-specified account over contact default
 	accountName := contact.WhatsAppAccount
 	if req.WhatsAppAccount != "" {
@@ -576,6 +587,9 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 	account, err := a.resolveWhatsAppAccount(orgID, accountName)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Failed to resolve WhatsApp account", nil, "")
+	}
+	if err := requireOpenServiceWindow(r, &contact); err != nil {
+		return nil
 	}
 
 	// Handle reply context
@@ -820,7 +834,6 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
-
 	// Get WhatsApp account - prefer form-specified account over contact default
 	mediaAccountName := contact.WhatsAppAccount
 	if formWhatsAppAccount != "" {
@@ -829,6 +842,9 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 	account, err := a.resolveWhatsAppAccount(orgID, mediaAccountName)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+	}
+	if err := requireOpenServiceWindow(r, &contact); err != nil {
+		return nil
 	}
 
 	// Save file locally first

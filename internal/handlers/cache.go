@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	appcrypto "github.com/shridarpatil/whatomate/internal/crypto"
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/shridarpatil/whatomate/internal/websocket"
 	"gorm.io/gorm"
@@ -54,8 +55,11 @@ func (a *App) getChatbotSettingsCached(orgID uuid.UUID, whatsAppAccount string) 
 	if err == nil && cached != "" {
 		var cacheData chatbotSettingsCache
 		if err := json.Unmarshal([]byte(cached), &cacheData); err == nil {
-			// Restore the API key from the cache wrapper
+			// Redis stores the encrypted DB value; decrypt only in the runtime copy.
 			cacheData.AI.APIKey = cacheData.AIAPIKey
+			if err := decryptChatbotAIAPIKey(&cacheData.ChatbotSettings, a.chatbotEncryptionKey()); err != nil {
+				return nil, err
+			}
 			return &cacheData.ChatbotSettings, nil
 		}
 	}
@@ -80,7 +84,27 @@ func (a *App) getChatbotSettingsCached(orgID uuid.UUID, whatsAppAccount string) 
 		a.Redis.Set(ctx, cacheKey, data, settingsCacheTTL)
 	}
 
+	if err := decryptChatbotAIAPIKey(&settings, a.chatbotEncryptionKey()); err != nil {
+		return nil, err
+	}
+
 	return &settings, nil
+}
+
+func (a *App) chatbotEncryptionKey() string {
+	if a.Config == nil {
+		return ""
+	}
+	return a.Config.App.EncryptionKey
+}
+
+func decryptChatbotAIAPIKey(settings *models.ChatbotSettings, encryptionKey string) error {
+	decrypted, err := appcrypto.Decrypt(settings.AI.APIKey, encryptionKey)
+	if err != nil {
+		return fmt.Errorf("decrypt chatbot AI API key: %w", err)
+	}
+	settings.AI.APIKey = decrypted
+	return nil
 }
 
 // getChatbotFlowsCached retrieves all enabled flows with steps from cache or database

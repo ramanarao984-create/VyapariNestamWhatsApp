@@ -199,3 +199,45 @@ func TestLoad_EnvMapsMultiWordKeys(t *testing.T) {
 	assert.Equal(t, "admin@example.com", cfg.DefaultAdmin.Email)
 	assert.Equal(t, "db.internal", cfg.Database.Host)
 }
+
+func TestValidateProductionSecretsRejectsExampleValuesWithoutLeakingThem(t *testing.T) {
+	const (
+		encryptionKey = "change-me-in-production"
+		jwtSecret     = "your-super-secret-jwt-key-change-in-production"
+		dbPassword    = "vyapari_nestam_whatsapp"
+	)
+
+	err := config.ValidateProductionSecrets(&config.Config{
+		App:      config.AppConfig{Environment: "production", EncryptionKey: encryptionKey},
+		JWT:      config.JWTConfig{Secret: jwtSecret},
+		Database: config.DatabaseConfig{Password: dbPassword},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "app.encryption_key")
+	assert.Contains(t, err.Error(), "jwt.secret")
+	assert.Contains(t, err.Error(), "database.password")
+	assert.NotContains(t, err.Error(), encryptionKey)
+	assert.NotContains(t, err.Error(), jwtSecret)
+	assert.NotContains(t, err.Error(), dbPassword)
+}
+
+func TestValidateProductionSecretsAllowsConfiguredProductionValues(t *testing.T) {
+	err := config.ValidateProductionSecrets(&config.Config{
+		App:      config.AppConfig{Environment: "production", EncryptionKey: "a-real-encryption-key-that-is-not-an-example"},
+		JWT:      config.JWTConfig{Secret: "a-real-jwt-signing-secret-that-is-not-an-example"},
+		Database: config.DatabaseConfig{Password: "a-real-database-password"},
+	})
+
+	assert.NoError(t, err)
+}
+
+func TestValidateProductionSecretsSkipsDevelopment(t *testing.T) {
+	err := config.ValidateProductionSecrets(&config.Config{
+		App:      config.AppConfig{Environment: "development"},
+		JWT:      config.JWTConfig{Secret: "change-me-in-production"},
+		Database: config.DatabaseConfig{Password: "vyapari_nestam_whatsapp"},
+	})
+
+	assert.NoError(t, err)
+}

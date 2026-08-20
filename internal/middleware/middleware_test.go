@@ -7,6 +7,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/shridarpatil/whatomate/internal/middleware"
+	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/shridarpatil/whatomate/test/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -268,6 +269,39 @@ func TestAuth_NilRoleID(t *testing.T) {
 	// Verify roleID is not set in context when nil
 	gotRoleID := result.RequestCtx.UserValue(middleware.ContextKeyRoleID)
 	assert.Nil(t, gotRoleID, "role_id should not be set when nil in claims")
+}
+
+func TestOrganizationContext_RejectsRevokedMembership(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	org := testutil.CreateTestOrganization(t, db)
+	user := testutil.CreateTestUser(t, db, org.ID)
+	organizationContext := middleware.OrganizationContext(db)
+
+	request := newTestRequest()
+	testutil.SetAuthContext(request, org.ID, user.ID)
+	require.NotNil(t, organizationContext(request), "active members should be allowed")
+
+	require.NoError(t, db.Where("user_id = ? AND organization_id = ?", user.ID, org.ID).
+		Delete(&models.UserOrganization{}).Error)
+
+	request = newTestRequest()
+	testutil.SetAuthContext(request, org.ID, user.ID)
+	assert.Nil(t, organizationContext(request), "a removed member must not retain access through an existing token")
+	assert.Equal(t, fasthttp.StatusForbidden, request.RequestCtx.Response.StatusCode())
+}
+
+func TestOrganizationContext_AllowsSuperAdminWithoutMembership(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	homeOrg := testutil.CreateTestOrganization(t, db)
+	targetOrg := testutil.CreateTestOrganization(t, db)
+	superAdmin := testutil.CreateTestUser(t, db, homeOrg.ID, testutil.WithSuperAdmin())
+
+	request := newTestRequest()
+	testutil.SetAuthContext(request, targetOrg.ID, superAdmin.ID)
+	result := middleware.OrganizationContext(db)(request)
+
+	require.NotNil(t, result, "super admins should retain cross-organization access")
+	assert.True(t, middleware.IsSuperAdmin(result), "database super-admin status should be available in context")
 }
 
 func TestRequirePermission(t *testing.T) {
