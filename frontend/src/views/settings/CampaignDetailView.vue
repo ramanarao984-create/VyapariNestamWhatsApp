@@ -9,6 +9,7 @@ import { useUnsavedChangesGuard } from '@/composables/useUnsavedChangesGuard'
 import { useHeaderMedia } from '@/composables/useHeaderMedia'
 import { getErrorMessage } from '@/lib/api-utils'
 import { formatDateTime } from '@/lib/utils'
+import { clinicCampaignRecipes } from '@/lib/clinic-workflows'
 import DetailPageLayout from '@/components/shared/DetailPageLayout.vue'
 import MetadataPanel from '@/components/shared/MetadataPanel.vue'
 import AuditLogPanel from '@/components/shared/AuditLogPanel.vue'
@@ -152,6 +153,13 @@ const form = ref({
   template_id: '',
   scheduled_at: '',
 })
+
+const selectedClinicRecipe = computed(() => clinicCampaignRecipes.find((recipe) => recipe.id === route.query.clinic_recipe))
+
+function applyClinicRecipe() {
+  const recipe = selectedClinicRecipe.value
+  if (recipe) form.value.name = recipe.name
+}
 
 const breadcrumbs = computed(() => [
   { label: t('nav.campaigns', 'Campaigns'), href: '/campaigns' },
@@ -895,8 +903,9 @@ async function addRecipientsFromCSV() {
 onMounted(async () => {
   await loadAccounts()
   if (isNew.value) {
+    applyClinicRecipe()
     isLoading.value = false
-    hasChanges.value = false
+    hasChanges.value = Boolean(selectedClinicRecipe.value)
   } else {
     await loadCampaign()
     // Load templates for the selected account after campaign loads
@@ -1032,6 +1041,16 @@ onUnmounted(() => {
         </Button>
       </div>
     </template>
+
+    <Card v-if="isNew && selectedClinicRecipe" class="mb-6 border-emerald-500/20 bg-emerald-500/[0.04] light:bg-emerald-50/70">
+      <CardContent class="flex items-start gap-3 p-4">
+        <Megaphone class="mt-0.5 h-4 w-4 text-emerald-400 light:text-emerald-700" />
+        <div>
+          <p class="text-sm font-medium">{{ selectedClinicRecipe.name }}</p>
+          <p class="mt-1 text-xs text-muted-foreground">{{ selectedClinicRecipe.description }} Select an approved template, add recipients, and review before sending.</p>
+        </div>
+      </CardContent>
+    </Card>
 
     <!-- Details Card -->
     <Card>

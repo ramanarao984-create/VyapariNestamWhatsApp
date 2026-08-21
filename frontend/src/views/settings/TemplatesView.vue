@@ -12,10 +12,11 @@ import { PageHeader, SearchInput, DataTable, IconButton, DeleteConfirmDialog, Er
 import { api, templatesService } from '@/services/api'
 import { useOrganizationsStore } from '@/stores/organizations'
 import { toast } from 'vue-sonner'
-import { Plus, RefreshCw, FileText, Pencil, Trash2, Loader2, MessageSquare, Image, FileIcon, Video } from 'lucide-vue-next'
+import { Plus, RefreshCw, FileText, Pencil, Trash2, Loader2, MessageSquare, Image, FileIcon, Video, Sparkles, Languages } from 'lucide-vue-next'
 import { getErrorMessage } from '@/lib/api-utils'
 import { useSearchPagination } from '@/composables/useSearchPagination'
 import { getQualityBadgeClass, getQualityRatingLabel } from '@/lib/utils'
+import { clinicTemplatePresets } from '@/lib/clinic-workflows'
 
 const { t } = useI18n()
 
@@ -314,6 +315,34 @@ function getHeaderIcon(type: string) {
 
     <ScrollArea class="flex-1">
       <div class="p-6">
+        <Card class="mb-6 border-emerald-500/20 bg-emerald-500/[0.04] light:bg-emerald-50/70">
+          <CardHeader class="pb-3">
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <CardTitle class="flex items-center gap-2">
+                  <Sparkles class="h-4 w-4 text-emerald-400 light:text-emerald-700" />
+                  Clinic message packs
+                </CardTitle>
+                <CardDescription>Start with a clinic-ready draft, adjust it for your practice, then submit it to Meta when ready.</CardDescription>
+              </div>
+              <div class="flex items-center gap-1 text-xs text-muted-foreground">
+                <Languages class="h-3.5 w-3.5" />
+                English, Telugu, and Tenglish
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div v-for="preset in clinicTemplatePresets" :key="preset.id" class="rounded-xl border border-border/70 bg-background/70 p-4">
+              <p class="font-medium text-sm">{{ preset.name }}</p>
+              <p class="mt-1 min-h-10 text-xs text-muted-foreground">{{ preset.description }}</p>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <RouterLink :to="{ path: '/templates/new', query: { clinic_pack: preset.id, clinic_language: 'en' } }"><Button variant="outline" size="sm">English</Button></RouterLink>
+                <RouterLink :to="{ path: '/templates/new', query: { clinic_pack: preset.id, clinic_language: 'te' } }"><Button variant="outline" size="sm">తెలుగు</Button></RouterLink>
+                <RouterLink :to="{ path: '/templates/new', query: { clinic_pack: preset.id, clinic_language: 'tenglish' } }"><Button variant="outline" size="sm">Tenglish</Button></RouterLink>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
         <div>
           <ErrorState
             v-if="error && !isLoading"

@@ -1208,7 +1208,7 @@ export const outgoingCallsService = {
   getICEServers: () =>
     api.get<{ ice_servers: Array<{ urls: string[]; username?: string; credential?: string }> }>('/calls/ice-servers'),
   getReadiness: () =>
-    api.get<{ ready: boolean; checks: CallingReadinessCheck[] }>('/calls/readiness'),
+    api.get<{ data: { ready: boolean; checks: CallingReadinessCheck[] } }>('/calls/readiness'),
 }
 
 export const callLogsService = {

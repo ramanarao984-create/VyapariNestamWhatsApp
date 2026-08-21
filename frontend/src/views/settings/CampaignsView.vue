@@ -29,10 +29,12 @@ import {
   CheckCircle,
   Clock,
   AlertCircle,
+  Wand2,
 } from 'lucide-vue-next'
 import { formatDate } from '@/lib/utils'
 import { useSearchPagination } from '@/composables/useSearchPagination'
 import { useDateRange } from '@/composables/useDateRange'
+import { clinicCampaignRecipes } from '@/lib/clinic-workflows'
 
 const { t } = useI18n()
 
@@ -262,6 +264,24 @@ function getProgressPercentage(campaign: Campaign): number {
     <!-- Campaigns List -->
     <ScrollArea class="flex-1">
       <div class="p-6">
+        <Card class="mb-6 border-emerald-500/20 bg-emerald-500/[0.04] light:bg-emerald-50/70">
+          <CardHeader class="pb-3">
+            <CardTitle class="flex items-center gap-2 text-base"><Wand2 class="h-4 w-4 text-emerald-400 light:text-emerald-700" /> Clinic campaign recipes</CardTitle>
+            <CardDescription>Choose a safe draft workflow first. You still choose the approved Meta template, recipients, and send time before anything is sent.</CardDescription>
+          </CardHeader>
+          <CardContent class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <RouterLink
+              v-for="recipe in clinicCampaignRecipes"
+              :key="recipe.id"
+              :to="{ path: '/campaigns/new', query: { clinic_recipe: recipe.id, clinic_template: recipe.templatePresetId } }"
+              class="rounded-xl border border-border/70 bg-background/70 p-4 text-inherit no-underline transition-colors hover:bg-muted/60"
+            >
+              <p class="font-medium text-sm">{{ recipe.name }}</p>
+              <p class="mt-1 text-xs text-muted-foreground">{{ recipe.description }}</p>
+              <span class="mt-3 inline-block text-xs font-medium text-emerald-400 light:text-emerald-700">Create draft →</span>
+            </RouterLink>
+          </CardContent>
+        </Card>
         <div>
           <Card>
             <CardHeader>

@@ -123,8 +123,7 @@ onMounted(async () => {
       }
     }
     if (readinessResponse) {
-      const readiness = readinessResponse.data.data || readinessResponse.data
-      callingReadiness.value = readiness
+      callingReadiness.value = readinessResponse.data.data
     }
   } catch (error) {
     console.error('Failed to load settings:', error)
@@ -138,7 +137,7 @@ async function refreshCallingReadiness() {
   isReadinessLoading.value = true
   try {
     const response = await outgoingCallsService.getReadiness()
-    callingReadiness.value = response.data.data || response.data
+    callingReadiness.value = response.data.data
   } catch {
     toast.error('Unable to check calling readiness')
   } finally {
