@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -9,6 +11,106 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
+
+// CallReadinessCheck is one independently actionable calling prerequisite.
+// A warning is intentionally distinct from an error: some conditions (such as
+// Meta enrollment) cannot be authoritatively verified by the Messages API.
+type CallReadinessCheck struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"` // pass, warning, or error
+	Message string `json:"message"`
+}
+
+// GetCallingReadiness handles GET /api/calls/readiness. It is an
+// administrator diagnostic for the local configuration and enrolled account
+// settings. Meta enrollment remains a manual verification because Meta does
+// not expose a reliable eligibility endpoint through the Cloud API.
+func (a *App) GetCallingReadiness(r *fastglue.Request) error {
+	orgID, _, err := a.requireAuth(r, models.ResourceSettingsCalling, models.ActionRead)
+	if err != nil {
+		return nil
+	}
+
+	checks := make([]CallReadinessCheck, 0, 7)
+	add := func(name, status, message string) {
+		checks = append(checks, CallReadinessCheck{Name: name, Status: status, Message: message})
+	}
+
+	if a.IsCallingEnabledForOrg(orgID) {
+		add("organization_calling", "pass", "Calling is enabled for this organization.")
+	} else {
+		add("organization_calling", "error", "Enable calling in Settings before agents can make or receive calls.")
+	}
+
+	if a.CallManager == nil {
+		add("call_service", "error", "The calling service is not running on this server.")
+	} else {
+		add("call_service", "pass", "The calling service is running.")
+	}
+
+	var accounts []models.WhatsAppAccount
+	if err := a.DB.Where("organization_id = ? AND status = ?", orgID, "active").Find(&accounts).Error; err != nil {
+		a.Log.Error("Failed to load calling readiness accounts", "error", err, "org_id", orgID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to check calling readiness", nil, "")
+	}
+
+	callingAccounts := 0
+	webhookTokens := 0
+	for _, account := range accounts {
+		if account.BusinessCallingEnabled {
+			callingAccounts++
+		}
+		if strings.TrimSpace(account.WebhookVerifyToken) != "" {
+			webhookTokens++
+		}
+	}
+	if callingAccounts == 0 {
+		add("whatsapp_number", "error", "Mark at least one active WhatsApp number as enabled for Business Calling after completing Meta enrollment.")
+	} else {
+		add("whatsapp_number", "warning", "Business Calling is enabled on "+strconv.Itoa(callingAccounts)+" active number(s). Confirm each number is enrolled and approved in Meta before launch.")
+	}
+	if webhookTokens == 0 {
+		add("webhook", "error", "No active WhatsApp account has a webhook verification token.")
+	} else {
+		add("webhook", "warning", "Webhook verification is configured for "+strconv.Itoa(webhookTokens)+" account(s). Verify the public callback URL and calling events in Meta.")
+	}
+
+	turnConfigured := false
+	for _, server := range a.Config.Calling.ICEServers {
+		for _, url := range server.URLs {
+			if strings.HasPrefix(strings.ToLower(url), "turn:") || strings.HasPrefix(strings.ToLower(url), "turns:") {
+				if strings.TrimSpace(server.Secret) != "" || (strings.TrimSpace(server.Username) != "" && strings.TrimSpace(server.Credential) != "") {
+					turnConfigured = true
+				}
+			}
+		}
+	}
+	if turnConfigured {
+		add("turn_relay", "pass", "A TURN relay with credentials is configured.")
+	} else {
+		add("turn_relay", "error", "Configure a credentialed TURN server so calls can connect when direct UDP is unavailable.")
+	}
+
+	if a.Config.Calling.RelayOnly || strings.TrimSpace(a.Config.Calling.PublicIP) != "" {
+		add("network", "pass", "WebRTC candidate routing is configured for public networking.")
+	} else {
+		add("network", "warning", "Set calling.public_ip for direct media on NAT/cloud hosts, or set relay_only after validating TURN.")
+	}
+	if a.Config.Calling.UDPPortMin > 0 && a.Config.Calling.UDPPortMax >= a.Config.Calling.UDPPortMin {
+		add("udp_ports", "pass", "WebRTC UDP range is configured as "+strconv.Itoa(int(a.Config.Calling.UDPPortMin))+"–"+strconv.Itoa(int(a.Config.Calling.UDPPortMax))+". Open this range in the firewall when direct media is used.")
+	} else {
+		add("udp_ports", "error", "Configure a valid calling UDP port range.")
+	}
+
+	ready := true
+	for _, check := range checks {
+		if check.Status == "error" {
+			ready = false
+			break
+		}
+	}
+	return r.SendEnvelope(map[string]any{"ready": ready, "checks": checks})
+}
 
 // InitiateOutgoingCall handles POST /api/calls/outgoing
 // Lets an agent start a voice call to a WhatsApp consumer.
@@ -175,9 +277,12 @@ func (a *App) SendCallPermissionRequest(r *fastglue.Request) error {
 // GetICEServers handles GET /api/calls/ice-servers
 // Returns the configured ICE (STUN/TURN) servers for the frontend to use in WebRTC peer connections.
 func (a *App) GetICEServers(r *fastglue.Request) error {
-	_, _, err := a.getOrgAndUserID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceOutgoingCalls, models.ActionRead)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
+	}
+	if err := a.requireCallingEnabled(r, orgID); err != nil {
+		return nil
 	}
 
 	type iceServer struct {

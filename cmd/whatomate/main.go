@@ -12,6 +12,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/shridarpatil/whatomate/internal/assignment"
+	"github.com/shridarpatil/whatomate/internal/backup"
 	"github.com/shridarpatil/whatomate/internal/calling"
 	"github.com/shridarpatil/whatomate/internal/config"
 	"github.com/shridarpatil/whatomate/internal/database"
@@ -45,6 +46,10 @@ func main() {
 		runServer(os.Args[2:])
 	case "worker":
 		runWorker(os.Args[2:])
+	case "backup":
+		runBackup(os.Args[2:])
+	case "restore":
+		runRestore(os.Args[2:])
 	case "version":
 		fmt.Printf("Whatomate %s (built %s)\n", Version, BuildTime)
 	case "help", "-h", "--help":
@@ -65,6 +70,8 @@ Usage:
 Commands:
   server    Start the API server (with optional embedded workers)
   worker    Start background workers only (no API server)
+  backup    Create and upload a PostgreSQL backup
+  restore   Restore a backup into an empty database
   version   Show version information
   help      Show this help message
 
@@ -90,6 +97,52 @@ Deployment Scenarios:
                  whatomate worker -workers 4  (on worker server)`)
 }
 
+func runBackup(args []string) {
+	backupFlags := flag.NewFlagSet("backup", flag.ExitOnError)
+	configPath := backupFlags.String("config", "config.toml", "Path to config file")
+	_ = backupFlags.Parse(args)
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+	if err := config.ValidateProductionSecrets(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Production secret validation failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	key, err := backup.RunPostgresBackup(context.Background(), cfg, time.Now())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Backup failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Backup uploaded: %s\n", key)
+}
+
+func runRestore(args []string) {
+	restoreFlags := flag.NewFlagSet("restore", flag.ExitOnError)
+	configPath := restoreFlags.String("config", "config.toml", "Path to config file")
+	objectKey := restoreFlags.String("key", "", "S3 object key returned by backup")
+	targetDatabase := restoreFlags.String("target-database", "", "Existing empty database to restore into")
+	_ = restoreFlags.Parse(args)
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+	if err := config.ValidateProductionSecrets(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Production secret validation failed: %v\n", err)
+		os.Exit(1)
+	}
+	if err := backup.RestorePostgresBackup(context.Background(), cfg, *objectKey, *targetDatabase); err != nil {
+		fmt.Fprintf(os.Stderr, "Restore failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Backup restored into %s\n", *targetDatabase)
+}
+
 // ============================================================================
 // SERVER COMMAND
 // ============================================================================
@@ -98,6 +151,8 @@ func runServer(args []string) {
 	serverFlags := flag.NewFlagSet("server", flag.ExitOnError)
 	configPath := serverFlags.String("config", "config.toml", "Path to config file")
 	migrate := serverFlags.Bool("migrate", false, "Run database migrations")
+	autoMigrate := serverFlags.Bool("auto-migrate", false, "Run GORM AutoMigrate (development only)")
+	rollback := serverFlags.Bool("rollback", false, "Roll back the latest versioned migration and exit")
 	numWorkers := serverFlags.Int("workers", 1, "Number of workers to run (0 to disable embedded workers)")
 	_ = serverFlags.Parse(args)
 
@@ -116,6 +171,15 @@ func runServer(args []string) {
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		lo.Fatal("Failed to load config", "error", err)
+	}
+	if err := config.ValidateProductionSecrets(cfg); err != nil {
+		lo.Fatal("Production secret validation failed", "error", err)
+	}
+	if *autoMigrate && cfg.App.Environment != "development" {
+		lo.Fatal("-auto-migrate is only allowed when app.environment=development")
+	}
+	if *rollback && (*migrate || *autoMigrate) {
+		lo.Fatal("-rollback cannot be combined with -migrate or -auto-migrate")
 	}
 
 	// Validate JWT secret
@@ -151,10 +215,23 @@ func runServer(args []string) {
 		lo.Fatal("Failed to connect to database", "error", err)
 	}
 	lo.Info("Connected to PostgreSQL")
+	if *autoMigrate {
+		if err := database.AutoMigrate(db); err != nil {
+			lo.Fatal("AutoMigrate failed", "error", err)
+		}
+		lo.Info("GORM AutoMigrate completed (development mode)")
+	}
+	if *rollback {
+		if err := database.RollbackLastMigration(db); err != nil {
+			lo.Fatal("Migration rollback failed", "error", err)
+		}
+		lo.Info("Latest migration rolled back")
+		return
+	}
 
 	// Run migrations if requested
 	if *migrate {
-		if err := database.RunMigrationWithProgress(db, &cfg.DefaultAdmin); err != nil {
+		if err := database.RunMigrationWithProgress(db, &cfg.DefaultAdmin, cfg.App.EncryptionKey); err != nil {
 			lo.Fatal("Migration failed", "error", err)
 		}
 		// Backfill v2 graph for any legacy chatbot flow still on Steps[].
@@ -281,6 +358,9 @@ func runServer(args []string) {
 	slaCtx, slaCancel := context.WithCancel(context.Background())
 	go slaProcessor.Start(slaCtx)
 	lo.Info("SLA processor started")
+	if cfg.Calling.RecordingRetentionDays > 0 {
+		app.CallManager.StartRecordingRetention(slaCtx)
+	}
 
 	// Start embedded workers
 	var workers []*worker.Worker
@@ -353,6 +433,7 @@ func runWorker(args []string) {
 	workerFlags := flag.NewFlagSet("worker", flag.ExitOnError)
 	configPath := workerFlags.String("config", "config.toml", "Path to config file")
 	workerCount := workerFlags.Int("workers", 1, "Number of workers to run")
+	autoMigrate := workerFlags.Bool("auto-migrate", false, "Run GORM AutoMigrate (development only)")
 	_ = workerFlags.Parse(args)
 
 	// Initialize logger
@@ -371,6 +452,12 @@ func runWorker(args []string) {
 	if err != nil {
 		lo.Fatal("Failed to load config", "error", err)
 	}
+	if err := config.ValidateProductionSecrets(cfg); err != nil {
+		lo.Fatal("Production secret validation failed", "error", err)
+	}
+	if *autoMigrate && cfg.App.Environment != "development" {
+		lo.Fatal("-auto-migrate is only allowed when app.environment=development")
+	}
 
 	// Set log level based on environment
 	if cfg.App.Environment == "production" {
@@ -387,6 +474,12 @@ func runWorker(args []string) {
 		lo.Fatal("Failed to connect to database", "error", err)
 	}
 	lo.Info("Connected to PostgreSQL")
+	if *autoMigrate {
+		if err := database.AutoMigrate(db); err != nil {
+			lo.Fatal("AutoMigrate failed", "error", err)
+		}
+		lo.Info("GORM AutoMigrate completed (development mode)")
+	}
 
 	// Connect to Redis
 	rdb, err := database.NewRedis(&cfg.Redis)
@@ -531,7 +624,11 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 		}
 		// Apply auth for all other /api routes (supports both JWT and API key)
 		if len(path) > 4 && path[:4] == "/api" {
-			return middleware.AuthWithDB(app.Config.JWT.Secret, app.DB)(r)
+			authenticated := middleware.AuthWithDB(app.Config.JWT.Secret, app.DB)(r)
+			if authenticated == nil {
+				return nil
+			}
+			return middleware.OrganizationContext(app.DB)(authenticated)
 		}
 		return r
 	})
@@ -850,6 +947,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/calls/permission-request", app.SendCallPermissionRequest)
 	g.GET("/api/calls/permission/{contactId}", app.GetCallPermission)
 	g.GET("/api/calls/ice-servers", app.GetICEServers)
+	g.GET("/api/calls/readiness", app.GetCallingReadiness)
 
 	// Catalogs
 	g.GET("/api/catalogs", app.ListCatalogs)

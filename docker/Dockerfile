@@ -61,13 +61,15 @@ FROM debian:bookworm-slim
 
 WORKDIR /app
 
-# Install runtime dependencies (TTS: espeak-ng, opus-tools; transcoding: ffmpeg)
+# Install runtime dependencies (PostgreSQL client is used by backup/restore commands).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates tzdata espeak-ng opus-tools ffmpeg \
+	ca-certificates tzdata espeak-ng opus-tools ffmpeg postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy binary from builder
 COPY --from=builder /app/whatomate .
+COPY scripts/ ./scripts/
+RUN chmod +x ./scripts/*.sh
 
 # Copy config example (will be overridden by env vars in production)
 COPY --from=builder /app/config.example.toml ./config.toml

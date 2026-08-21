@@ -262,7 +262,7 @@ psql -c "CREATE DATABASE whatomate;"
 ./whatomate server -migrate
 ```
 
-Schema is generated from GORM struct tags in `internal/models/`; there are no SQL migration files. Re-running with `-migrate` is safe — it adds new tables/columns and is a no-op for existing ones.
+Production schema changes use embedded, versioned Goose SQL migrations. Re-running with `-migrate` is safe because Goose records applied versions in `goose_db_version`. The legacy GORM path is available only for local development with `-auto-migrate` and `app.environment = "development"`.
 
 ## WhatsApp API Configuration
 

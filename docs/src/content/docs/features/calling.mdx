@@ -295,6 +295,19 @@ credential = "pass"
 
 Calling is enabled per-organization in the database. Set `calling_enabled = true` on the organization record to allow calls for that org.
 
+### Production readiness check
+
+Before enabling agents, open **Settings > Calling** and use **Calling
+readiness**. It checks the local calling service, enabled WhatsApp accounts,
+webhook token, credentialed TURN relay, public-network configuration, and UDP
+range. A red item blocks local readiness; amber items are actions that must be
+verified outside the app.
+
+The diagnostic deliberately does **not** claim that Meta enrollment or webhook
+delivery succeeded. Confirm Business Calling eligibility/enrollment for each
+number and subscribe the production callback to all required calling events in
+Meta before accepting real calls.
+
 ## Text-to-Speech (IVR Greetings)
 
 Whatomate uses [Piper](https://github.com/OHF-Voice/piper1-gpl) for offline text-to-speech generation. When admins type greeting text in the IVR flow editor, the server generates OGG/Opus audio files using Piper + `opusenc`. This is optional — you can also upload pre-recorded audio files directly.

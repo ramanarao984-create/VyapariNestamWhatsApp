@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -270,6 +271,28 @@ func OrganizationContext(db *gorm.DB) fastglue.FastMiddleware {
 			return nil
 		}
 
+		// Credentials contain an organization ID, but membership can change after
+		// they are issued. Re-check membership so removed users lose access at once.
+		if !user.IsSuperAdmin {
+			var membership models.UserOrganization
+			if err := db.Where("user_id = ? AND organization_id = ?", userID, orgID).First(&membership).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					_ = r.SendErrorEnvelope(fasthttp.StatusForbidden, "You no longer have access to this organization", nil, "")
+				} else {
+					_ = r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Unable to verify organization access", nil, "")
+				}
+				return nil
+			}
+
+			if membership.RoleID != nil {
+				r.RequestCtx.SetUserValue(ContextKeyRoleID, *membership.RoleID)
+			} else {
+				// Do not retain a role claim from the credential when the current
+				// organization membership has no assigned role.
+				r.RequestCtx.SetUserValue(ContextKeyRoleID, nil)
+			}
+		}
+
 		// Load organization
 		var org models.Organization
 		if err := db.Where("id = ?", orgID).First(&org).Error; err != nil {
@@ -280,6 +303,8 @@ func OrganizationContext(db *gorm.DB) fastglue.FastMiddleware {
 		// Store in context
 		r.RequestCtx.SetUserValue(ContextKeyUser, &user)
 		r.RequestCtx.SetUserValue(ContextKeyOrganization, &org)
+		// Use the current database privilege rather than a stale JWT claim.
+		r.RequestCtx.SetUserValue(ContextKeyIsSuperAdmin, user.IsSuperAdmin)
 
 		return r
 	}

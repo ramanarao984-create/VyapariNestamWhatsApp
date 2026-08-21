@@ -1,0 +1,11 @@
+.git
+.github
+frontend/node_modules
+frontend/.npm-cache
+frontend/dist
+**/.pnpm-store
+docker/.env
+docker/config.toml
+docker/uploads
+uploads
+audio

@@ -49,6 +49,7 @@ import {
 } from 'lucide-vue-next'
 import { getErrorMessage } from '@/lib/api-utils'
 import { getQualityBadgeClass, getQualityRatingLabel } from '@/lib/utils'
+import { getClinicTemplatePreset, resolveClinicLanguage, type ClinicMessageLanguage } from '@/lib/clinic-workflows'
 
 interface WhatsAppAccount {
   id: string
@@ -649,11 +650,29 @@ function getFlowScreens(flowId: string): string[] {
     .filter(Boolean)
 }
 
+function applyClinicTemplatePreset() {
+  const preset = getClinicTemplatePreset(typeof route.query.clinic_pack === 'string' ? route.query.clinic_pack : undefined)
+  const requestedLanguage = typeof route.query.clinic_language === 'string' ? route.query.clinic_language : 'en'
+  if (!preset || !['en', 'te', 'tenglish'].includes(requestedLanguage)) return
+
+  const clinicLanguage = requestedLanguage as ClinicMessageLanguage
+  form.value = {
+    ...form.value,
+    name: `clinic_${preset.id}_${clinicLanguage}`,
+    display_name: `${preset.name}${clinicLanguage === 'tenglish' ? ' (Tenglish)' : ''}`,
+    language: resolveClinicLanguage(clinicLanguage),
+    category: preset.category,
+    body_content: preset.body[clinicLanguage],
+    sample_values: preset.sampleValues.map((value, index) => ({ component: 'body', index: index + 1, value })),
+  }
+}
+
 onMounted(async () => {
   await Promise.all([loadAccounts(), loadFlows()])
   if (isNew.value) {
+    applyClinicTemplatePreset()
     isLoading.value = false
-    hasChanges.value = false
+    hasChanges.value = Boolean(route.query.clinic_pack)
   } else {
     await loadTemplate()
   }

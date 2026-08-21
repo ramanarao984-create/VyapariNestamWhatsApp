@@ -49,6 +49,10 @@ s3_bucket = ""
 s3_region = ""
 s3_key = ""
 s3_secret = ""
+s3_endpoint = ""          # Optional: https://s3.example.com for MinIO/R2/B2/etc.
+s3_force_path_style = false # Set true when your provider requires bucket paths
+s3_server_side_encryption = "" # "AES256" or "aws:kms"; also enable bucket default encryption
+s3_kms_key_id = ""              # Optional customer-managed KMS key ID for aws:kms
 
 [whatsapp]
 webhook_verify_token = "random-string-change-this"
@@ -92,6 +96,9 @@ audio_dir = "./audio"         # Directory for IVR audio files
 # ringback_file = "ringback.opus"
 transfer_timeout_secs = 120   # How long to wait for agent to accept transfer
 recording_enabled = true      # Record calls to S3 (requires [storage] s3 config)
+recording_retention_days = 0  # 0 keeps recordings indefinitely; set a positive number to enable cleanup
+recording_retention_action = "archive" # archive or delete after the retention period
+recording_archive_prefix = "recordings-archive"
 udp_port_min = 10000          # WebRTC UDP port range start
 udp_port_max = 10100          # WebRTC UDP port range end
 # public_ip = "1.2.3.4"      # Public IP for NAT mapping (required on AWS/cloud)

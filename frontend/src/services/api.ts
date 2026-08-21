@@ -1190,6 +1190,12 @@ export interface CallPermission {
   expires_at?: string
 }
 
+export interface CallingReadinessCheck {
+  name: string
+  status: 'pass' | 'warning' | 'error'
+  message: string
+}
+
 export const outgoingCallsService = {
   initiate: (data: { contact_id: string; whatsapp_account: string; sdp_offer: string }) =>
     api.post<{ call_log_id: string; sdp_answer: string }>('/calls/outgoing', data),
@@ -1201,6 +1207,8 @@ export const outgoingCallsService = {
     api.get<CallPermission>(`/calls/permission/${contactId}`, { params: { whatsapp_account: whatsappAccount } }),
   getICEServers: () =>
     api.get<{ ice_servers: Array<{ urls: string[]; username?: string; credential?: string }> }>('/calls/ice-servers'),
+  getReadiness: () =>
+    api.get<{ data: { ready: boolean; checks: CallingReadinessCheck[] } }>('/calls/readiness'),
 }
 
 export const callLogsService = {

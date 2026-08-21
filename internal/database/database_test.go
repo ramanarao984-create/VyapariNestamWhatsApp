@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shridarpatil/whatomate/internal/config"
+	appcrypto "github.com/shridarpatil/whatomate/internal/crypto"
 	"github.com/shridarpatil/whatomate/internal/database"
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/shridarpatil/whatomate/test/testutil"
@@ -248,4 +249,65 @@ func TestCreateDefaultAdmin_UsesExistingOrg(t *testing.T) {
 	var orgCount int64
 	db.Model(&models.Organization{}).Count(&orgCount)
 	assert.Equal(t, int64(1), orgCount, "should reuse existing organization")
+}
+
+func TestBackfillChatbotAIAPIKeys_EncryptsPlaintextAndIsIdempotent(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	cleanAll(t, db)
+
+	const encryptionKey = "chatbot-backfill-test-encryption-key"
+	const plaintextKey = "sk-legacy-plaintext-key"
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "AI Key Backfill Org",
+		Slug:      "ai-key-backfill-" + uuid.NewString(),
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+
+	alreadyEncrypted, err := appcrypto.Encrypt("sk-already-encrypted", encryptionKey)
+	require.NoError(t, err)
+
+	legacy := models.ChatbotSettings{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		WhatsAppAccount: "legacy-account",
+		AI:               models.AIConfig{APIKey: plaintextKey},
+	}
+	encrypted := models.ChatbotSettings{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		WhatsAppAccount: "encrypted-account",
+		AI:               models.AIConfig{APIKey: alreadyEncrypted},
+	}
+	empty := models.ChatbotSettings{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		WhatsAppAccount: "empty-account",
+	}
+	require.NoError(t, db.Create(&legacy).Error)
+	require.NoError(t, db.Create(&encrypted).Error)
+	require.NoError(t, db.Create(&empty).Error)
+
+	require.NoError(t, database.BackfillChatbotAIAPIKeys(db, encryptionKey))
+
+	readRawKey := func(id uuid.UUID) string {
+		t.Helper()
+		var value string
+		require.NoError(t, db.Raw("SELECT ai_api_key FROM chatbot_settings WHERE id = ?", id).Row().Scan(&value))
+		return value
+	}
+
+	legacyCiphertext := readRawKey(legacy.ID)
+	assert.True(t, appcrypto.IsEncrypted(legacyCiphertext))
+	assert.NotEqual(t, plaintextKey, legacyCiphertext)
+	decrypted, err := appcrypto.Decrypt(legacyCiphertext, encryptionKey)
+	require.NoError(t, err)
+	assert.Equal(t, plaintextKey, decrypted)
+	assert.Equal(t, alreadyEncrypted, readRawKey(encrypted.ID))
+	assert.Empty(t, readRawKey(empty.ID))
+
+	require.NoError(t, database.BackfillChatbotAIAPIKeys(db, encryptionKey))
+	assert.Equal(t, legacyCiphertext, readRawKey(legacy.ID))
 }
