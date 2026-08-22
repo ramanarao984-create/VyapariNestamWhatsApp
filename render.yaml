@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: vyapari-nestam-test-raman
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: main
+    autoDeployTrigger: commit
+    dockerfilePath: docker/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: WHATOMATE_APP__ENVIRONMENT
+        value: production
+      - key: WHATOMATE_APP__DEBUG
+        value: "false"
+      - key: WHATOMATE_APP__ENCRYPTION_KEY
+        generateValue: true
+      - key: WHATOMATE_JWT__SECRET
+        generateValue: true
+      - key: WHATOMATE_SERVER__HOST
+        value: 0.0.0.0
+      - key: WHATOMATE_SERVER__PORT
+        value: "10000"
+      - key: WHATOMATE_SERVER__ALLOWED_ORIGINS
+        value: https://vyapari-nestam-test-raman.onrender.com
+      - key: WHATOMATE_RATE_LIMIT__ENABLED
+        value: "true"
+      - key: WHATOMATE_RATE_LIMIT__TRUST_PROXY
+        value: "true"
+      - key: WHATOMATE_DATABASE_URL
+        fromDatabase:
+          name: vyapari-nestam-whatsapp-test-db
+          property: connectionString
+      - key: WHATOMATE_REDIS_URL
+        fromService:
+          type: keyvalue
+          name: vyapari-nestam-whatsapp-test-redis
+          property: connectionString
+      - key: WHATOMATE_DEFAULT_ADMIN__EMAIL
+        sync: false
+      - key: WHATOMATE_DEFAULT_ADMIN__PASSWORD
+        sync: false

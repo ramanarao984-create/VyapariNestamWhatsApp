@@ -200,6 +200,33 @@ func TestLoad_EnvMapsMultiWordKeys(t *testing.T) {
 	assert.Equal(t, "db.internal", cfg.Database.Host)
 }
 
+func TestLoad_ConnectionURLOverrides(t *testing.T) {
+	t.Setenv("WHATOMATE_DATABASE_URL", "postgresql://db-user:db-pass@postgres.internal:5433/vyapari_test?sslmode=require")
+	t.Setenv("WHATOMATE_REDIS_URL", "rediss://default:redis-pass@redis.internal:6380")
+
+	cfg, err := config.Load(writeConfig(t, ""))
+	require.NoError(t, err)
+
+	assert.Equal(t, "postgres.internal", cfg.Database.Host)
+	assert.Equal(t, 5433, cfg.Database.Port)
+	assert.Equal(t, "db-user", cfg.Database.User)
+	assert.Equal(t, "db-pass", cfg.Database.Password)
+	assert.Equal(t, "vyapari_test", cfg.Database.Name)
+	assert.Equal(t, "require", cfg.Database.SSLMode)
+	assert.Equal(t, "redis.internal", cfg.Redis.Host)
+	assert.Equal(t, 6380, cfg.Redis.Port)
+	assert.Equal(t, "default", cfg.Redis.Username)
+	assert.Equal(t, "redis-pass", cfg.Redis.Password)
+	assert.True(t, cfg.Redis.TLS)
+}
+
+func TestLoad_RejectsInvalidConnectionURLs(t *testing.T) {
+	t.Setenv("WHATOMATE_DATABASE_URL", "https://not-a-postgres-url")
+	_, err := config.Load(writeConfig(t, ""))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "WHATOMATE_DATABASE_URL")
+}
+
 func TestValidateProductionSecretsRejectsExampleValuesWithoutLeakingThem(t *testing.T) {
 	const (
 		encryptionKey = "change-me-in-production"

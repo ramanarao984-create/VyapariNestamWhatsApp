@@ -5,6 +5,8 @@ import (
 	"crypto/sha1" //nolint:gosec // SHA-1 is mandated by the coturn TURN REST API (RFC draft)
 	"encoding/base64"
 	"fmt"
+	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -225,11 +227,65 @@ func Load(configPath string) (*Config, error) {
 	if err := k.Unmarshal("", &cfg); err != nil {
 		return nil, err
 	}
+	if err := applyConnectionURLOverrides(&cfg); err != nil {
+		return nil, err
+	}
 
 	// Set defaults
 	setDefaults(&cfg)
 
 	return &cfg, nil
+}
+
+// applyConnectionURLOverrides supports managed hosting platforms that expose
+// private datastore credentials as one URL. The existing per-field settings
+// remain the primary configuration format; these optional overrides simply
+// translate standard URLs into the same fields before validation and startup.
+func applyConnectionURLOverrides(cfg *Config) error {
+	if value := strings.TrimSpace(os.Getenv("WHATOMATE_DATABASE_URL")); value != "" {
+		u, err := url.Parse(value)
+		if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Hostname() == "" || u.User == nil || strings.Trim(u.Path, "/") == "" {
+			return fmt.Errorf("WHATOMATE_DATABASE_URL must be a valid PostgreSQL connection URL")
+		}
+
+		cfg.Database.Host = u.Hostname()
+		if port := u.Port(); port != "" {
+			cfg.Database.Port, err = strconv.Atoi(port)
+			if err != nil || cfg.Database.Port <= 0 {
+				return fmt.Errorf("WHATOMATE_DATABASE_URL contains an invalid port")
+			}
+		}
+		cfg.Database.User = u.User.Username()
+		cfg.Database.Password, _ = u.User.Password()
+		cfg.Database.Name = strings.Trim(u.Path, "/")
+		if sslMode := u.Query().Get("sslmode"); sslMode != "" {
+			cfg.Database.SSLMode = sslMode
+		} else {
+			cfg.Database.SSLMode = "require"
+		}
+	}
+
+	if value := strings.TrimSpace(os.Getenv("WHATOMATE_REDIS_URL")); value != "" {
+		u, err := url.Parse(value)
+		if err != nil || (u.Scheme != "redis" && u.Scheme != "rediss") || u.Hostname() == "" {
+			return fmt.Errorf("WHATOMATE_REDIS_URL must be a valid Redis connection URL")
+		}
+
+		cfg.Redis.Host = u.Hostname()
+		if port := u.Port(); port != "" {
+			cfg.Redis.Port, err = strconv.Atoi(port)
+			if err != nil || cfg.Redis.Port <= 0 {
+				return fmt.Errorf("WHATOMATE_REDIS_URL contains an invalid port")
+			}
+		}
+		if u.User != nil {
+			cfg.Redis.Username = u.User.Username()
+			cfg.Redis.Password, _ = u.User.Password()
+		}
+		cfg.Redis.TLS = u.Scheme == "rediss"
+	}
+
+	return nil
 }
 
 // ValidateProductionSecrets rejects empty and known example credentials before
