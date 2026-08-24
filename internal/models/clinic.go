@@ -160,3 +160,20 @@ type ClinicAppointmentReminder struct {
 }
 
 func (ClinicAppointmentReminder) TableName() string { return "clinic_appointment_reminders" }
+
+// ClinicWaitlistEntry is an operational queue entry. It stores only the
+// scoped references needed to offer a newly available appointment slot.
+type ClinicWaitlistEntry struct {
+	BaseModel
+	OrganizationID  uuid.UUID            `gorm:"type:uuid;index;not null" json:"organization_id"`
+	WhatsAppAccount string               `gorm:"size:100;index;not null" json:"whatsapp_account"`
+	ContactID       uuid.UUID            `gorm:"type:uuid;index;not null" json:"contact_id"`
+	PractitionerID  *uuid.UUID           `gorm:"type:uuid;index" json:"practitioner_id,omitempty"`
+	ServiceID       *uuid.UUID           `gorm:"type:uuid;index" json:"service_id,omitempty"`
+	Status          ClinicWaitlistStatus `gorm:"size:20;not null;default:'waiting'" json:"status"`
+	OfferStartsAt   *time.Time           `json:"offer_starts_at,omitempty"`
+	OfferExpiresAt  *time.Time           `json:"offer_expires_at,omitempty"`
+	RespondedAt     *time.Time           `json:"responded_at,omitempty"`
+}
+
+func (ClinicWaitlistEntry) TableName() string { return "clinic_waitlist_entries" }

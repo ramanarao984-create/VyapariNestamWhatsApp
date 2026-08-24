@@ -104,6 +104,7 @@ func GetMigrationModels() []MigrationModel {
 		{"ClinicAppointmentEvent", &models.ClinicAppointmentEvent{}},
 		{"ClinicBookingSession", &models.ClinicBookingSession{}},
 		{"ClinicAppointmentReminder", &models.ClinicAppointmentReminder{}},
+		{"ClinicWaitlistEntry", &models.ClinicWaitlistEntry{}},
 
 		// User tracking
 		{"UserAvailabilityLog", &models.UserAvailabilityLog{}},

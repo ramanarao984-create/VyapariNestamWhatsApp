@@ -224,6 +224,16 @@ const (
 	ClinicBookingStepCancel       ClinicBookingStep = "cancel"
 )
 
+type ClinicWaitlistStatus string
+
+const (
+	ClinicWaitlistStatusWaiting  ClinicWaitlistStatus = "waiting"
+	ClinicWaitlistStatusOffered  ClinicWaitlistStatus = "offered"
+	ClinicWaitlistStatusAccepted ClinicWaitlistStatus = "accepted"
+	ClinicWaitlistStatusExpired  ClinicWaitlistStatus = "expired"
+	ClinicWaitlistStatusRemoved  ClinicWaitlistStatus = "removed"
+)
+
 // InputType represents chatbot flow step input types
 type InputType string
 

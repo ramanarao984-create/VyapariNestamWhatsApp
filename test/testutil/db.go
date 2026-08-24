@@ -118,6 +118,7 @@ func runMigrations(db *gorm.DB) error {
 		&models.ClinicAppointmentEvent{},
 		&models.ClinicBookingSession{},
 		&models.ClinicAppointmentReminder{},
+		&models.ClinicWaitlistEntry{},
 		// Bulk message models
 		&models.BulkMessageCampaign{},
 		&models.BulkMessageRecipient{},
@@ -169,6 +170,7 @@ func cleanupTables(db *gorm.DB) {
 		"clinic_appointment_events",
 		"clinic_booking_sessions",
 		"clinic_appointment_reminders",
+		"clinic_waitlist_entries",
 		"clinic_appointments",
 		"clinic_availability_exceptions",
 		"clinic_availability_rules",
