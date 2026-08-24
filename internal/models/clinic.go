@@ -11,16 +11,19 @@ import (
 // configuration does not leak into generic CRM behaviour.
 type ClinicProfile struct {
 	BaseModel
-	OrganizationID         uuid.UUID `gorm:"type:uuid;index;not null" json:"organization_id"`
-	DisplayName            string    `gorm:"size:255;not null" json:"display_name"`
-	Timezone               string    `gorm:"size:100;not null;default:'Asia/Kolkata'" json:"timezone"`
-	Address                string    `gorm:"type:text" json:"address"`
-	ReceptionPhone         string    `gorm:"size:50" json:"reception_phone"`
-	BookingEnabled         bool      `gorm:"default:false" json:"booking_enabled"`
-	DefaultSlotMinutes     int       `gorm:"default:15" json:"default_slot_minutes"`
-	AdvanceBookingDays     int       `gorm:"default:30" json:"advance_booking_days"`
-	MinimumNoticeMinutes   int       `gorm:"default:60" json:"minimum_notice_minutes"`
-	CancellationCutoffMins int       `gorm:"default:120" json:"cancellation_cutoff_minutes"`
+	OrganizationID         uuid.UUID  `gorm:"type:uuid;index;not null" json:"organization_id"`
+	DisplayName            string     `gorm:"size:255;not null" json:"display_name"`
+	Timezone               string     `gorm:"size:100;not null;default:'Asia/Kolkata'" json:"timezone"`
+	Address                string     `gorm:"type:text" json:"address"`
+	ReceptionPhone         string     `gorm:"size:50" json:"reception_phone"`
+	BookingEnabled         bool       `gorm:"default:false" json:"booking_enabled"`
+	DefaultSlotMinutes     int        `gorm:"default:15" json:"default_slot_minutes"`
+	AdvanceBookingDays     int        `gorm:"default:30" json:"advance_booking_days"`
+	MinimumNoticeMinutes   int        `gorm:"default:60" json:"minimum_notice_minutes"`
+	CancellationCutoffMins int        `gorm:"default:120" json:"cancellation_cutoff_minutes"`
+	ReminderEnabled        bool       `gorm:"default:false" json:"reminder_enabled"`
+	ReminderLeadMins       int        `gorm:"default:1440" json:"reminder_lead_minutes"`
+	ReminderTemplateID     *uuid.UUID `gorm:"type:uuid;index" json:"reminder_template_id,omitempty"`
 }
 
 func (ClinicProfile) TableName() string { return "clinic_profiles" }
@@ -143,3 +146,17 @@ type ClinicBookingSession struct {
 }
 
 func (ClinicBookingSession) TableName() string { return "clinic_booking_sessions" }
+
+type ClinicAppointmentReminder struct {
+	BaseModel
+	OrganizationID uuid.UUID  `gorm:"type:uuid;index;not null" json:"organization_id"`
+	AppointmentID  uuid.UUID  `gorm:"type:uuid;index;not null" json:"appointment_id"`
+	ScheduledAt    time.Time  `gorm:"not null" json:"scheduled_at"`
+	Status         string     `gorm:"size:20;not null;default:'pending'" json:"status"`
+	AttemptCount   int        `gorm:"default:0" json:"attempt_count"`
+	NextAttemptAt  *time.Time `json:"next_attempt_at,omitempty"`
+	SentAt         *time.Time `json:"sent_at,omitempty"`
+	LastError      string     `gorm:"size:500" json:"last_error"`
+}
+
+func (ClinicAppointmentReminder) TableName() string { return "clinic_appointment_reminders" }

@@ -117,6 +117,7 @@ func runMigrations(db *gorm.DB) error {
 		&models.ClinicAppointment{},
 		&models.ClinicAppointmentEvent{},
 		&models.ClinicBookingSession{},
+		&models.ClinicAppointmentReminder{},
 		// Bulk message models
 		&models.BulkMessageCampaign{},
 		&models.BulkMessageRecipient{},
@@ -167,6 +168,7 @@ func cleanupTables(db *gorm.DB) {
 		// Nestam AI clinic scheduling
 		"clinic_appointment_events",
 		"clinic_booking_sessions",
+		"clinic_appointment_reminders",
 		"clinic_appointments",
 		"clinic_availability_exceptions",
 		"clinic_availability_rules",
