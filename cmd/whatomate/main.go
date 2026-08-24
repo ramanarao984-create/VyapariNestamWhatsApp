@@ -358,6 +358,9 @@ func runServer(args []string) {
 	slaCtx, slaCancel := context.WithCancel(context.Background())
 	go slaProcessor.Start(slaCtx)
 	lo.Info("SLA processor started")
+	reminderProcessor := handlers.NewClinicReminderProcessor(app, time.Minute)
+	go reminderProcessor.Start(slaCtx)
+	lo.Info("Nestam AI reminder processor started")
 	if cfg.Calling.RecordingRetentionDays > 0 {
 		app.CallManager.StartRecordingRetention(slaCtx)
 	}
