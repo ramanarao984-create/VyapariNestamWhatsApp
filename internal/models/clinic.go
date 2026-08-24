@@ -100,6 +100,13 @@ type ClinicAppointment struct {
 	ConfirmedAt        *time.Time        `json:"confirmed_at,omitempty"`
 	CancelledAt        *time.Time        `json:"cancelled_at,omitempty"`
 	CancellationReason string            `gorm:"type:text" json:"cancellation_reason"`
+
+	// Relations are used only for the calendar response. Handler preloads add
+	// organization filters, so a corrupted cross-tenant foreign key cannot
+	// disclose another clinic's contact or practitioner details.
+	Contact      *Contact            `gorm:"foreignKey:ContactID;references:ID" json:"contact,omitempty"`
+	Practitioner *ClinicPractitioner `gorm:"foreignKey:PractitionerID;references:ID" json:"practitioner,omitempty"`
+	Service      *ClinicService      `gorm:"foreignKey:ServiceID;references:ID" json:"service,omitempty"`
 }
 
 func (ClinicAppointment) TableName() string { return "clinic_appointments" }

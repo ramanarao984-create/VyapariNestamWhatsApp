@@ -108,6 +108,14 @@ func runMigrations(db *gorm.DB) error {
 		&models.ChatbotSessionMessage{},
 		&models.AIContext{},
 		&models.AgentTransfer{},
+		// Nestam AI clinic scheduling
+		&models.ClinicProfile{},
+		&models.ClinicPractitioner{},
+		&models.ClinicService{},
+		&models.ClinicAvailabilityRule{},
+		&models.ClinicAvailabilityException{},
+		&models.ClinicAppointment{},
+		&models.ClinicAppointmentEvent{},
 		// Bulk message models
 		&models.BulkMessageCampaign{},
 		&models.BulkMessageRecipient{},
@@ -155,6 +163,14 @@ func cleanupTables(db *gorm.DB) {
 		"chatbot_settings",
 		"ai_contexts",
 		"agent_transfers",
+		// Nestam AI clinic scheduling
+		"clinic_appointment_events",
+		"clinic_appointments",
+		"clinic_availability_exceptions",
+		"clinic_availability_rules",
+		"clinic_services",
+		"clinic_practitioners",
+		"clinic_profiles",
 		// WhatsApp tables
 		"messages",
 		"tags",

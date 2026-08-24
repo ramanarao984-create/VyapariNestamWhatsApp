@@ -10,6 +10,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ClinicProfileRequest captures operational setup only. It deliberately does
@@ -54,6 +55,14 @@ type CreateClinicAppointmentRequest struct {
 	PractitionerID  string  `json:"practitioner_id"`
 	ServiceID       *string `json:"service_id"`
 	StartsAt        string  `json:"starts_at"`
+}
+
+type RescheduleClinicAppointmentRequest struct {
+	StartsAt string `json:"starts_at"`
+}
+
+type CancelClinicAppointmentRequest struct {
+	Reason string `json:"reason"`
 }
 
 // GetClinicProfile returns the caller's tenant-scoped Nestam AI clinic setup.
@@ -569,4 +578,239 @@ func isClinicBookingConflict(err error) bool {
 	return strings.Contains(message, "clinic_appointments_active_interval_excl") ||
 		strings.Contains(message, "idx_clinic_appointments_active_slot") ||
 		strings.Contains(message, "duplicate key")
+}
+
+// ListClinicAppointments is the calendar data source. Its time range is kept
+// deliberately bounded so a receptionist view cannot accidentally request an
+// unbounded tenant history.
+func (a *App) ListClinicAppointments(r *fastglue.Request) error {
+	orgID, _, err := a.requireAuth(r, models.ResourceClinic, models.ActionRead)
+	if err != nil {
+		return nil
+	}
+	profile, location, err := a.clinicProfileAndLocation(orgID)
+	if err != nil {
+		return sendClinicSetupError(r, err)
+	}
+	from, to, err := clinicCalendarRange(r, location)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+	}
+	query := a.DB.Where("clinic_appointments.organization_id = ? AND clinic_appointments.starts_at < ? AND clinic_appointments.ends_at > ?", orgID, to, from)
+	if value := strings.TrimSpace(string(r.RequestCtx.QueryArgs().Peek("status"))); value != "" {
+		status := models.AppointmentStatus(value)
+		if !isValidAppointmentStatus(status) {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "status is invalid", nil, "")
+		}
+		query = query.Where("clinic_appointments.status = ?", status)
+	}
+	if value := strings.TrimSpace(string(r.RequestCtx.QueryArgs().Peek("practitioner_id"))); value != "" {
+		practitionerID, err := uuid.Parse(value)
+		if err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "practitioner_id must be a valid UUID", nil, "")
+		}
+		if _, err := findByIDAndOrg[models.ClinicPractitioner](a.DB, r, practitionerID, orgID, "practitioner"); err != nil {
+			return nil
+		}
+		query = query.Where("clinic_appointments.practitioner_id = ?", practitionerID)
+	}
+	var appointments []models.ClinicAppointment
+	if err := query.
+		Preload("Practitioner", "organization_id = ?", orgID).
+		Preload("Contact", "organization_id = ?", orgID).
+		Preload("Service", "organization_id = ?", orgID).
+		Order("clinic_appointments.starts_at ASC").Find(&appointments).Error; err != nil {
+		a.Log.Error("Failed to list clinic appointments", "error", err, "org_id", orgID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load appointments", nil, "")
+	}
+	return r.SendEnvelope(map[string]any{"timezone": profile.Timezone, "from": from, "to": to, "appointments": appointments})
+}
+
+func clinicCalendarRange(r *fastglue.Request, location *time.Location) (time.Time, time.Time, error) {
+	now := time.Now().In(location)
+	defaultFrom := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
+	from, err := clinicCalendarDate(string(r.RequestCtx.QueryArgs().Peek("from")), defaultFrom, location)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	to, err := clinicCalendarDate(string(r.RequestCtx.QueryArgs().Peek("to")), from.AddDate(0, 0, 7), location)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	if !from.Before(to) || to.After(from.AddDate(0, 0, 31)) {
+		return time.Time{}, time.Time{}, errValidation("calendar range must be between 1 and 31 days")
+	}
+	return from.UTC(), to.UTC(), nil
+}
+
+func clinicCalendarDate(value string, fallback time.Time, location *time.Location) (time.Time, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback, nil
+	}
+	date, err := time.ParseInLocation("2006-01-02", value, location)
+	if err != nil || date.Format("2006-01-02") != value {
+		return time.Time{}, errValidation("calendar dates must use YYYY-MM-DD")
+	}
+	return date, nil
+}
+
+// RescheduleClinicAppointment moves an active appointment to a freshly
+// calculated slot. The existing stored duration is preserved, even when a
+// service's configuration later changes.
+func (a *App) RescheduleClinicAppointment(r *fastglue.Request) error {
+	orgID, userID, err := a.requireAuth(r, models.ResourceClinic, models.ActionWrite)
+	if err != nil {
+		return nil
+	}
+	appointmentID, err := parsePathUUID(r, "id", "appointment")
+	if err != nil {
+		return nil
+	}
+	var req RescheduleClinicAppointmentRequest
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
+	}
+	startsAt, err := time.Parse(time.RFC3339, strings.TrimSpace(req.StartsAt))
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "starts_at must be an RFC3339 timestamp", nil, "")
+	}
+	profile, location, err := a.clinicProfileAndLocation(orgID)
+	if err != nil {
+		return sendClinicSetupError(r, err)
+	}
+	localDate, err := clinicDateWithinWindow(startsAt, location, profile.AdvanceBookingDays)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+	}
+	var appointment models.ClinicAppointment
+	if err := a.DB.Where("id = ? AND organization_id = ?", appointmentID, orgID).First(&appointment).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "appointment not found", nil, "")
+		}
+		a.Log.Error("Failed to load appointment for reschedule", "error", err, "org_id", orgID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load appointment", nil, "")
+	}
+	if !isActiveAppointmentStatus(appointment.Status) {
+		return r.SendErrorEnvelope(fasthttp.StatusConflict, "only active appointments can be rescheduled", nil, "")
+	}
+	duration := int(appointment.EndsAt.Sub(appointment.StartsAt).Minutes())
+	if duration <= 0 {
+		a.Log.Error("Appointment has invalid stored duration", "appointment_id", appointmentID, "org_id", orgID)
+		return r.SendErrorEnvelope(fasthttp.StatusConflict, "appointment has an invalid stored duration", nil, "")
+	}
+	slots, err := a.availableClinicSlots(orgID, appointment.PractitionerID, profile, location, localDate, duration, 0)
+	if err != nil {
+		a.Log.Error("Failed to calculate reschedule slots", "error", err, "appointment_id", appointmentID, "org_id", orgID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to confirm appointment availability", nil, "")
+	}
+	startsAt = startsAt.UTC()
+	var selectedSlot *clinic.Slot
+	for i := range slots {
+		if slots[i].StartsAt.Equal(startsAt) {
+			selectedSlot = &slots[i]
+			break
+		}
+	}
+	if selectedSlot == nil {
+		return r.SendErrorEnvelope(fasthttp.StatusConflict, "selected time is no longer available", nil, "")
+	}
+
+	oldAppointment := appointment
+	err = a.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND organization_id = ?", appointmentID, orgID).First(&appointment).Error; err != nil {
+			return err
+		}
+		if !isActiveAppointmentStatus(appointment.Status) {
+			return errAppointmentNotActive
+		}
+		oldStartsAt := appointment.StartsAt
+		appointment.StartsAt, appointment.EndsAt = selectedSlot.StartsAt, selectedSlot.EndsAt
+		if err := tx.Save(&appointment).Error; err != nil {
+			return err
+		}
+		event := models.ClinicAppointmentEvent{BaseModel: models.BaseModel{ID: uuid.New()}, OrganizationID: orgID, AppointmentID: appointment.ID, ActorUserID: &userID, EventType: models.AppointmentEventRescheduled, Payload: models.JSONB{"old_starts_at": oldStartsAt.Format(time.RFC3339), "starts_at": appointment.StartsAt.Format(time.RFC3339), "ends_at": appointment.EndsAt.Format(time.RFC3339)}}
+		return tx.Create(&event).Error
+	})
+	if err != nil {
+		if err == errAppointmentNotActive || isClinicBookingConflict(err) {
+			return r.SendErrorEnvelope(fasthttp.StatusConflict, "selected appointment or time is no longer available", nil, "")
+		}
+		a.Log.Error("Failed to reschedule clinic appointment", "error", err, "appointment_id", appointmentID, "org_id", orgID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to reschedule appointment", nil, "")
+	}
+	a.logAudit(orgID, userID, "clinic_appointment", appointment.ID, models.AuditActionUpdated, &oldAppointment, &appointment)
+	return r.SendEnvelope(appointment)
+}
+
+// CancelClinicAppointment retains the booking and immutable event history;
+// cancellation is a state transition, never a destructive delete.
+func (a *App) CancelClinicAppointment(r *fastglue.Request) error {
+	orgID, userID, err := a.requireAuth(r, models.ResourceClinic, models.ActionWrite)
+	if err != nil {
+		return nil
+	}
+	appointmentID, err := parsePathUUID(r, "id", "appointment")
+	if err != nil {
+		return nil
+	}
+	var req CancelClinicAppointmentRequest
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
+	}
+	reason := strings.TrimSpace(req.Reason)
+	if len(reason) > 500 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "reason exceeds the allowed length", nil, "")
+	}
+	var appointment models.ClinicAppointment
+	if err := a.DB.Where("id = ? AND organization_id = ?", appointmentID, orgID).First(&appointment).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "appointment not found", nil, "")
+		}
+		a.Log.Error("Failed to load appointment for cancellation", "error", err, "org_id", orgID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load appointment", nil, "")
+	}
+	if !isActiveAppointmentStatus(appointment.Status) {
+		return r.SendErrorEnvelope(fasthttp.StatusConflict, "only active appointments can be cancelled", nil, "")
+	}
+	oldAppointment := appointment
+	now := time.Now().UTC()
+	err = a.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND organization_id = ?", appointmentID, orgID).First(&appointment).Error; err != nil {
+			return err
+		}
+		if !isActiveAppointmentStatus(appointment.Status) {
+			return errAppointmentNotActive
+		}
+		appointment.Status, appointment.CancelledAt, appointment.CancellationReason = models.AppointmentStatusCancelled, &now, reason
+		if err := tx.Save(&appointment).Error; err != nil {
+			return err
+		}
+		event := models.ClinicAppointmentEvent{BaseModel: models.BaseModel{ID: uuid.New()}, OrganizationID: orgID, AppointmentID: appointment.ID, ActorUserID: &userID, EventType: models.AppointmentEventCancelled, Payload: models.JSONB{"reason": reason}}
+		return tx.Create(&event).Error
+	})
+	if err != nil {
+		if err == errAppointmentNotActive {
+			return r.SendErrorEnvelope(fasthttp.StatusConflict, "appointment is no longer active", nil, "")
+		}
+		a.Log.Error("Failed to cancel clinic appointment", "error", err, "appointment_id", appointmentID, "org_id", orgID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to cancel appointment", nil, "")
+	}
+	a.logAudit(orgID, userID, "clinic_appointment", appointment.ID, models.AuditActionUpdated, &oldAppointment, &appointment)
+	return r.SendEnvelope(appointment)
+}
+
+var errAppointmentNotActive = errValidation("appointment is no longer active")
+
+func isActiveAppointmentStatus(status models.AppointmentStatus) bool {
+	return status == models.AppointmentStatusPending || status == models.AppointmentStatusConfirmed
+}
+
+func isValidAppointmentStatus(status models.AppointmentStatus) bool {
+	switch status {
+	case models.AppointmentStatusPending, models.AppointmentStatusConfirmed, models.AppointmentStatusCancelled, models.AppointmentStatusCompleted, models.AppointmentStatusNoShow:
+		return true
+	default:
+		return false
+	}
 }

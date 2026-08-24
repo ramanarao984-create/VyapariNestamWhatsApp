@@ -3,6 +3,8 @@ package handlers
 import (
 	"errors"
 	"testing"
+
+	"github.com/shridarpatil/whatomate/internal/models"
 )
 
 func TestValidateClinicAvailabilityRuleRequest(t *testing.T) {
@@ -38,5 +40,17 @@ func TestIsClinicBookingConflict(t *testing.T) {
 	}
 	if isClinicBookingConflict(errors.New("database connection unavailable")) {
 		t.Fatal("unrelated database error was treated as a booking conflict")
+	}
+}
+
+func TestAppointmentStatusHelpers(t *testing.T) {
+	if !isActiveAppointmentStatus(models.AppointmentStatusPending) || !isActiveAppointmentStatus(models.AppointmentStatusConfirmed) {
+		t.Fatal("active appointment statuses were not recognized")
+	}
+	if isActiveAppointmentStatus(models.AppointmentStatusCancelled) {
+		t.Fatal("cancelled appointment was treated as active")
+	}
+	if !isValidAppointmentStatus(models.AppointmentStatusNoShow) || isValidAppointmentStatus("unknown") {
+		t.Fatal("appointment status validation is incorrect")
 	}
 }
