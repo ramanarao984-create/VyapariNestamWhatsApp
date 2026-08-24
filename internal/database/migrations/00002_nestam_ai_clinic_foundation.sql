@@ -87,8 +87,6 @@ CREATE TABLE clinic_appointments (
     ends_at timestamptz NOT NULL,
     status varchar(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'cancelled', 'completed', 'no_show')),
     source varchar(20) NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'whatsapp', 'reception')),
-    patient_note text,
-    reception_note text,
     confirmed_at timestamptz,
     cancelled_at timestamptz,
     cancellation_reason text,

@@ -97,8 +97,6 @@ type ClinicAppointment struct {
 	EndsAt             time.Time         `gorm:"not null" json:"ends_at"`
 	Status             AppointmentStatus `gorm:"size:20;not null;default:'pending'" json:"status"`
 	Source             AppointmentSource `gorm:"size:20;not null;default:'manual'" json:"source"`
-	PatientNote        string            `gorm:"type:text" json:"patient_note"`
-	ReceptionNote      string            `gorm:"type:text" json:"reception_note"`
 	ConfirmedAt        *time.Time        `json:"confirmed_at,omitempty"`
 	CancelledAt        *time.Time        `json:"cancelled_at,omitempty"`
 	CancellationReason string            `gorm:"type:text" json:"cancellation_reason"`

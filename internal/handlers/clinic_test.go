@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"errors"
-	"strings"
 	"testing"
 )
 
@@ -27,9 +26,9 @@ func TestValidateCreateClinicAppointmentRequest(t *testing.T) {
 		t.Fatalf("valid appointment request rejected: %v", err)
 	}
 
-	valid.ReceptionNote = strings.Repeat("x", 1001)
+	valid.StartsAt = ""
 	if err := validateCreateClinicAppointmentRequest(valid); err == nil {
-		t.Fatal("oversized receptionist note was accepted")
+		t.Fatal("request without appointment start was accepted")
 	}
 }
 

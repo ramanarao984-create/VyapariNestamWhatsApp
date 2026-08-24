@@ -47,15 +47,13 @@ type ClinicAvailabilityRuleRequest struct {
 }
 
 // CreateClinicAppointmentRequest is intentionally operational: no diagnosis,
-// prescription, payment, or clinical-record fields are accepted here.
+// prescription, payment, note, or clinical-record fields are accepted here.
 type CreateClinicAppointmentRequest struct {
 	WhatsAppAccount string  `json:"whatsapp_account"`
 	ContactID       string  `json:"contact_id"`
 	PractitionerID  string  `json:"practitioner_id"`
 	ServiceID       *string `json:"service_id"`
 	StartsAt        string  `json:"starts_at"`
-	PatientNote     string  `json:"patient_note"`
-	ReceptionNote   string  `json:"reception_note"`
 }
 
 // GetClinicProfile returns the caller's tenant-scoped Nestam AI clinic setup.
@@ -524,8 +522,7 @@ func (a *App) CreateClinicAppointment(r *fastglue.Request) error {
 		BaseModel: models.BaseModel{ID: uuid.New()}, OrganizationID: orgID, WhatsAppAccount: account.Name,
 		ContactID: contactID, PractitionerID: practitionerID, ServiceID: serviceID,
 		StartsAt: selectedSlot.StartsAt, EndsAt: selectedSlot.EndsAt,
-		Status: models.AppointmentStatusConfirmed, Source: models.AppointmentSourceReception,
-		PatientNote: strings.TrimSpace(req.PatientNote), ReceptionNote: strings.TrimSpace(req.ReceptionNote), ConfirmedAt: &now,
+		Status: models.AppointmentStatusConfirmed, Source: models.AppointmentSourceReception, ConfirmedAt: &now,
 	}
 	err = a.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&appointment).Error; err != nil {
@@ -552,9 +549,6 @@ func (a *App) CreateClinicAppointment(r *fastglue.Request) error {
 func validateCreateClinicAppointmentRequest(req CreateClinicAppointmentRequest) error {
 	if strings.TrimSpace(req.WhatsAppAccount) == "" || strings.TrimSpace(req.ContactID) == "" || strings.TrimSpace(req.PractitionerID) == "" || strings.TrimSpace(req.StartsAt) == "" {
 		return errValidation("whatsapp_account, contact_id, practitioner_id, and starts_at are required")
-	}
-	if len(strings.TrimSpace(req.PatientNote)) > 500 || len(strings.TrimSpace(req.ReceptionNote)) > 1000 {
-		return errValidation("appointment notes exceed the allowed length")
 	}
 	return nil
 }
