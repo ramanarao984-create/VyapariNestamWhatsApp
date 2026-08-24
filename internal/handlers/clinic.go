@@ -65,6 +65,12 @@ type CancelClinicAppointmentRequest struct {
 	Reason string `json:"reason"`
 }
 
+type ClinicReminderSettingsRequest struct {
+	Enabled     bool    `json:"enabled"`
+	LeadMinutes int     `json:"lead_minutes"`
+	TemplateID  *string `json:"template_id"`
+}
+
 // GetClinicProfile returns the caller's tenant-scoped Nestam AI clinic setup.
 // A missing profile is a normal onboarding state, not an error.
 func (a *App) GetClinicProfile(r *fastglue.Request) error {
@@ -82,6 +88,51 @@ func (a *App) GetClinicProfile(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load clinic setup", nil, "")
 	}
 	return r.SendEnvelope(map[string]any{"configured": true, "profile": profile})
+}
+
+// UpdateClinicReminderSettings configures a compliance-safe reminder sender.
+// Enabling requires a Meta-approved UTILITY template belonging to the caller's
+// organization and WhatsApp account; free-text reminders are never enabled.
+func (a *App) UpdateClinicReminderSettings(r *fastglue.Request) error {
+	orgID, userID, err := a.requireAuth(r, models.ResourceClinic, models.ActionWrite)
+	if err != nil {
+		return nil
+	}
+	var req ClinicReminderSettingsRequest
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
+	}
+	if req.LeadMinutes < 15 || req.LeadMinutes > 10080 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "lead_minutes must be between 15 and 10080", nil, "")
+	}
+	var profile models.ClinicProfile
+	if err := a.DB.Where("organization_id = ?", orgID).First(&profile).Error; err != nil {
+		return sendClinicSetupError(r, err)
+	}
+	oldProfile := profile
+	profile.ReminderEnabled = req.Enabled
+	profile.ReminderLeadMins = req.LeadMinutes
+	profile.ReminderTemplateID = nil
+	if req.Enabled {
+		if req.TemplateID == nil || strings.TrimSpace(*req.TemplateID) == "" {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "an approved utility template is required when reminders are enabled", nil, "")
+		}
+		templateID, err := uuid.Parse(strings.TrimSpace(*req.TemplateID))
+		if err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "template_id must be a valid UUID", nil, "")
+		}
+		var template models.Template
+		if err := a.DB.Where("id = ? AND organization_id = ? AND status = ? AND category = ?", templateID, orgID, string(models.TemplateStatusApproved), string(models.TemplateCategoryUtility)).First(&template).Error; err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "template must be an approved utility template in this organization", nil, "")
+		}
+		profile.ReminderTemplateID = &templateID
+	}
+	if err := a.DB.Save(&profile).Error; err != nil {
+		a.Log.Error("Failed to update clinic reminder settings", "error", err, "org_id", orgID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save reminder settings", nil, "")
+	}
+	a.logAudit(orgID, userID, "clinic_profile", profile.ID, models.AuditActionUpdated, &oldProfile, &profile)
+	return r.SendEnvelope(profile)
 }
 
 // UpsertClinicProfile creates or updates the one operational profile for the

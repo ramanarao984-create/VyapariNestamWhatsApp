@@ -833,6 +833,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	// Nestam AI clinic setup (booking remains disabled until a clinic enables it)
 	g.GET("/api/clinic/profile", app.GetClinicProfile)
 	g.PUT("/api/clinic/profile", app.UpsertClinicProfile)
+	g.PUT("/api/clinic/reminder-settings", app.UpdateClinicReminderSettings)
 	g.GET("/api/clinic/practitioners", app.ListClinicPractitioners)
 	g.POST("/api/clinic/practitioners", app.CreateClinicPractitioner)
 	g.GET("/api/clinic/services", app.ListClinicServices)
