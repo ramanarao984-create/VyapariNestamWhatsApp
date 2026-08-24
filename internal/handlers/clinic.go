@@ -71,6 +71,13 @@ type ClinicReminderSettingsRequest struct {
 	TemplateID  *string `json:"template_id"`
 }
 
+type ClinicWaitlistRequest struct {
+	WhatsAppAccount string  `json:"whatsapp_account"`
+	ContactID       string  `json:"contact_id"`
+	PractitionerID  *string `json:"practitioner_id"`
+	ServiceID       *string `json:"service_id"`
+}
+
 // GetClinicProfile returns the caller's tenant-scoped Nestam AI clinic setup.
 // A missing profile is a normal onboarding state, not an error.
 func (a *App) GetClinicProfile(r *fastglue.Request) error {
@@ -133,6 +140,98 @@ func (a *App) UpdateClinicReminderSettings(r *fastglue.Request) error {
 	}
 	a.logAudit(orgID, userID, "clinic_profile", profile.ID, models.AuditActionUpdated, &oldProfile, &profile)
 	return r.SendEnvelope(profile)
+}
+
+func (a *App) ListClinicWaitlist(r *fastglue.Request) error {
+	orgID, _, err := a.requireAuth(r, models.ResourceClinic, models.ActionRead)
+	if err != nil {
+		return nil
+	}
+	query := a.DB.Where("organization_id = ?", orgID)
+	if status := strings.TrimSpace(string(r.RequestCtx.QueryArgs().Peek("status"))); status != "" {
+		query = query.Where("status = ?", status)
+	}
+	var entries []models.ClinicWaitlistEntry
+	if err := query.Order("created_at ASC").Find(&entries).Error; err != nil {
+		a.Log.Error("Failed to list clinic waitlist", "error", err, "org_id", orgID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load waitlist", nil, "")
+	}
+	return r.SendEnvelope(map[string]any{"entries": entries})
+}
+
+// CreateClinicWaitlistEntry adds a contact to one tenant's operational queue.
+// All references are verified against the authenticated organization.
+func (a *App) CreateClinicWaitlistEntry(r *fastglue.Request) error {
+	orgID, userID, err := a.requireAuth(r, models.ResourceClinic, models.ActionWrite)
+	if err != nil {
+		return nil
+	}
+	var req ClinicWaitlistRequest
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
+	}
+	contactID, err := uuid.Parse(strings.TrimSpace(req.ContactID))
+	if err != nil || strings.TrimSpace(req.WhatsAppAccount) == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "whatsapp_account and a valid contact_id are required", nil, "")
+	}
+	account, err := a.resolveWhatsAppAccount(orgID, strings.TrimSpace(req.WhatsAppAccount))
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "WhatsApp account was not found in this organization", nil, "")
+	}
+	contact, err := findByIDAndOrg[models.Contact](a.DB, r, contactID, orgID, "contact")
+	if err != nil {
+		return nil
+	}
+	if contact.WhatsAppAccount != account.Name {
+		return r.SendErrorEnvelope(fasthttp.StatusConflict, "contact belongs to a different WhatsApp account", nil, "")
+	}
+	entry := models.ClinicWaitlistEntry{BaseModel: models.BaseModel{ID: uuid.New()}, OrganizationID: orgID, WhatsAppAccount: account.Name, ContactID: contactID, Status: models.ClinicWaitlistStatusWaiting}
+	if req.PractitionerID != nil && strings.TrimSpace(*req.PractitionerID) != "" {
+		id, err := uuid.Parse(strings.TrimSpace(*req.PractitionerID))
+		if err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "practitioner_id must be a valid UUID", nil, "")
+		}
+		if _, err := findByIDAndOrg[models.ClinicPractitioner](a.DB, r, id, orgID, "practitioner"); err != nil {
+			return nil
+		}
+		entry.PractitionerID = &id
+	}
+	if req.ServiceID != nil && strings.TrimSpace(*req.ServiceID) != "" {
+		id, err := uuid.Parse(strings.TrimSpace(*req.ServiceID))
+		if err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "service_id must be a valid UUID", nil, "")
+		}
+		if _, err := findByIDAndOrg[models.ClinicService](a.DB, r, id, orgID, "service"); err != nil {
+			return nil
+		}
+		entry.ServiceID = &id
+	}
+	if err := a.DB.Create(&entry).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to add waitlist entry", nil, "")
+	}
+	a.logAudit(orgID, userID, "clinic_waitlist_entry", entry.ID, models.AuditActionCreated, nil, &entry)
+	return r.SendEnvelope(entry)
+}
+
+func (a *App) RemoveClinicWaitlistEntry(r *fastglue.Request) error {
+	orgID, userID, err := a.requireAuth(r, models.ResourceClinic, models.ActionWrite)
+	if err != nil {
+		return nil
+	}
+	id, err := parsePathUUID(r, "id", "waitlist entry")
+	if err != nil {
+		return nil
+	}
+	entry, err := findByIDAndOrg[models.ClinicWaitlistEntry](a.DB, r, id, orgID, "waitlist entry")
+	if err != nil {
+		return nil
+	}
+	old := *entry
+	if err := a.DB.Model(entry).Updates(map[string]any{"status": models.ClinicWaitlistStatusRemoved, "responded_at": time.Now().UTC()}).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to remove waitlist entry", nil, "")
+	}
+	a.logAudit(orgID, userID, "clinic_waitlist_entry", entry.ID, models.AuditActionUpdated, &old, entry)
+	return r.SendEnvelope(entry)
 }
 
 // UpsertClinicProfile creates or updates the one operational profile for the
