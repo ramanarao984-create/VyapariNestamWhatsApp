@@ -85,6 +85,7 @@ const (
 	ResourceCallTransfers           = "call_transfers"
 	ResourceOutgoingCalls           = "outgoing_calls"
 	ResourceAuditLogs               = "audit_logs"
+	ResourceClinic                  = "clinic"
 )
 
 // PermissionAction constants for available actions
@@ -235,6 +236,10 @@ func DefaultPermissions() []Permission {
 
 		// Audit Logs
 		{Resource: ResourceAuditLogs, Action: ActionRead, Description: "View audit logs"},
+
+		// Nestam AI clinic operations
+		{Resource: ResourceClinic, Action: ActionRead, Description: "View clinic schedule and appointments"},
+		{Resource: ResourceClinic, Action: ActionWrite, Description: "Manage clinic setup and appointments"},
 	}
 }
 
@@ -287,6 +292,8 @@ func SystemRolePermissions() map[string][]string {
 		"ivr_flows:read", "ivr_flows:write", "ivr_flows:delete",
 		"call_transfers:read", "call_transfers:write",
 		"outgoing_calls:read", "outgoing_calls:write",
+		// Nestam AI clinic operations
+		"clinic:read", "clinic:write",
 	}
 
 	agentPermissions := []string{
@@ -309,6 +316,8 @@ func SystemRolePermissions() map[string][]string {
 		"call_transfers:read", "call_transfers:write",
 		// Outgoing Calls
 		"outgoing_calls:read", "outgoing_calls:write",
+		// Nestam AI clinic operations
+		"clinic:read", "clinic:write",
 	}
 
 	return map[string][]string{

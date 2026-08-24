@@ -830,6 +830,14 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.PUT("/api/chatbot/transfers/{id}/resume", app.ResumeFromTransfer)
 	g.PUT("/api/chatbot/transfers/{id}/assign", app.AssignAgentTransfer)
 
+	// Nestam AI clinic setup (booking remains disabled until a clinic enables it)
+	g.GET("/api/clinic/profile", app.GetClinicProfile)
+	g.PUT("/api/clinic/profile", app.UpsertClinicProfile)
+	g.GET("/api/clinic/practitioners", app.ListClinicPractitioners)
+	g.POST("/api/clinic/practitioners", app.CreateClinicPractitioner)
+	g.GET("/api/clinic/services", app.ListClinicServices)
+	g.POST("/api/clinic/services", app.CreateClinicService)
+
 	// Teams (admin/manager - access control in handler)
 	g.GET("/api/teams", app.ListTeams)
 	g.POST("/api/teams", app.CreateTeam)
