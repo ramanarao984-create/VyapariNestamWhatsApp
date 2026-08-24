@@ -94,6 +94,15 @@ func GetMigrationModels() []MigrationModel {
 		{"AIContext", &models.AIContext{}},
 		{"AgentTransfer", &models.AgentTransfer{}},
 
+		// Nestam AI clinic operations
+		{"ClinicProfile", &models.ClinicProfile{}},
+		{"ClinicPractitioner", &models.ClinicPractitioner{}},
+		{"ClinicService", &models.ClinicService{}},
+		{"ClinicAvailabilityRule", &models.ClinicAvailabilityRule{}},
+		{"ClinicAvailabilityException", &models.ClinicAvailabilityException{}},
+		{"ClinicAppointment", &models.ClinicAppointment{}},
+		{"ClinicAppointmentEvent", &models.ClinicAppointmentEvent{}},
+
 		// User tracking
 		{"UserAvailabilityLog", &models.UserAvailabilityLog{}},
 

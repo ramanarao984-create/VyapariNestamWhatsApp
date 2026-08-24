@@ -282,7 +282,7 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	// Filter by WhatsApp account if specified
 	accountFilter := string(r.RequestCtx.QueryArgs().Peek("account"))
 	if accountFilter != "" {
-		msgQuery = msgQuery.Where("whats_app_account = ?", accountFilter)
+		msgQuery = msgQuery.Where("whatsapp_account = ?", accountFilter)
 	}
 
 	// Check if user without contacts:read should only see current conversation
@@ -1383,7 +1383,7 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 				updates["profile_name"] = req.ProfileName
 			}
 			if req.WhatsAppAccount != "" {
-				updates["whats_app_account"] = req.WhatsAppAccount
+				updates["whatsapp_account"] = req.WhatsAppAccount
 			}
 			if req.Tags != nil {
 				tagsArray := make(models.JSONBArray, len(req.Tags))
@@ -1485,7 +1485,7 @@ func (a *App) UpdateContact(r *fastglue.Request) error {
 		updates["profile_name"] = *req.ProfileName
 	}
 	if req.WhatsAppAccount != nil {
-		updates["whats_app_account"] = *req.WhatsAppAccount
+		updates["whatsapp_account"] = *req.WhatsAppAccount
 	}
 	if req.Tags != nil {
 		tagsArray := make(models.JSONBArray, len(req.Tags))

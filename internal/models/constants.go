@@ -167,6 +167,38 @@ const (
 	ContextTypeAPI    ContextType = "api"
 )
 
+// AppointmentStatus represents the operational state of a clinic booking.
+type AppointmentStatus string
+
+const (
+	AppointmentStatusPending   AppointmentStatus = "pending"
+	AppointmentStatusConfirmed AppointmentStatus = "confirmed"
+	AppointmentStatusCancelled AppointmentStatus = "cancelled"
+	AppointmentStatusCompleted AppointmentStatus = "completed"
+	AppointmentStatusNoShow    AppointmentStatus = "no_show"
+)
+
+// AppointmentSource identifies how a clinic appointment was initiated.
+type AppointmentSource string
+
+const (
+	AppointmentSourceManual    AppointmentSource = "manual"
+	AppointmentSourceWhatsApp  AppointmentSource = "whatsapp"
+	AppointmentSourceReception AppointmentSource = "reception"
+)
+
+// AppointmentEventType records an immutable operational booking event.
+type AppointmentEventType string
+
+const (
+	AppointmentEventCreated     AppointmentEventType = "created"
+	AppointmentEventConfirmed   AppointmentEventType = "confirmed"
+	AppointmentEventRescheduled AppointmentEventType = "rescheduled"
+	AppointmentEventCancelled   AppointmentEventType = "cancelled"
+	AppointmentEventCompleted   AppointmentEventType = "completed"
+	AppointmentEventNoShow      AppointmentEventType = "no_show"
+)
+
 // InputType represents chatbot flow step input types
 type InputType string
 
