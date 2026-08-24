@@ -219,6 +219,9 @@ const (
 	ClinicBookingStepDate         ClinicBookingStep = "date"
 	ClinicBookingStepSlot         ClinicBookingStep = "slot"
 	ClinicBookingStepConfirm      ClinicBookingStep = "confirm"
+	ClinicBookingStepManage       ClinicBookingStep = "manage"
+	ClinicBookingStepManageAction ClinicBookingStep = "manage_action"
+	ClinicBookingStepCancel       ClinicBookingStep = "cancel"
 )
 
 // InputType represents chatbot flow step input types

@@ -18,6 +18,17 @@ func TestNestamBookingStartText(t *testing.T) {
 	}
 }
 
+func TestNestamBookingManageText(t *testing.T) {
+	for _, value := range []string{"Manage appointment", "my appointment", "RESCHEDULE APPOINTMENT", "cancel appointment"} {
+		if !isBookingManageText(value) {
+			t.Fatalf("management trigger %q was not recognized", value)
+		}
+	}
+	if isBookingManageText("book appointment") {
+		t.Fatal("new booking request was treated as a management trigger")
+	}
+}
+
 func TestNestamBookingSlotExists(t *testing.T) {
 	start := time.Date(2026, time.August, 24, 8, 30, 0, 0, time.UTC)
 	slots := []clinic.Slot{{StartsAt: start, EndsAt: start.Add(15 * time.Minute)}}

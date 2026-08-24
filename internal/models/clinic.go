@@ -132,6 +132,7 @@ type ClinicBookingSession struct {
 	OrganizationID   uuid.UUID                  `gorm:"type:uuid;index;not null" json:"organization_id"`
 	WhatsAppAccount  string                     `gorm:"size:100;index;not null" json:"whatsapp_account"`
 	ContactID        uuid.UUID                  `gorm:"type:uuid;index;not null" json:"contact_id"`
+	AppointmentID    *uuid.UUID                 `gorm:"type:uuid;index" json:"appointment_id,omitempty"`
 	ServiceID        *uuid.UUID                 `gorm:"type:uuid;index" json:"service_id,omitempty"`
 	PractitionerID   *uuid.UUID                 `gorm:"type:uuid;index" json:"practitioner_id,omitempty"`
 	SelectedStartsAt *time.Time                 `json:"selected_starts_at,omitempty"`

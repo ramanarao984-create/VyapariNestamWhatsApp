@@ -10,13 +10,19 @@ import (
 	"github.com/shridarpatil/whatomate/internal/clinic"
 	"github.com/shridarpatil/whatomate/internal/models"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
-	bookingStartID  = "nestam_booking_start"
-	bookingCancelID = "nestam_booking_cancel"
-	bookingConfirm  = "nestam_booking_confirm"
-	bookingChange   = "nestam_booking_change"
+	bookingStartID   = "nestam_booking_start"
+	bookingCancelID  = "nestam_booking_cancel"
+	bookingConfirm   = "nestam_booking_confirm"
+	bookingChange    = "nestam_booking_change"
+	bookingManageID  = "nestam_booking_manage"
+	manageCancel     = "nestam_manage_cancel"
+	manageReschedule = "nestam_manage_reschedule"
+	manageCancelOK   = "nestam_manage_cancel_confirm"
+	manageKeep       = "nestam_manage_keep"
 )
 
 // processNestamBookingMessage owns only explicit booking commands and opaque
@@ -41,9 +47,17 @@ func (a *App) processNestamBookingMessage(account *models.WhatsAppAccount, conta
 	}
 
 	isStart := buttonID == bookingStartID || isBookingStartText(messageText)
+	isManage := buttonID == bookingManageID || isBookingManageText(messageText)
 	if err == gorm.ErrRecordNotFound {
-		if !isStart {
+		if !isStart && !isManage {
 			return false
+		}
+		if isManage {
+			if err := a.startNestamAppointmentManagement(account, contact, profile, location, now); err != nil {
+				a.Log.Error("Failed to start Nestam AI appointment management", "error", err, "org_id", orgID, "contact_id", contact.ID)
+				_ = a.sendAndSaveTextMessage(account, contact, "I couldn't open appointment management right now. Please contact reception.")
+			}
+			return true
 		}
 		if err := a.startNestamBooking(account, contact, now); err != nil {
 			a.Log.Error("Failed to start Nestam AI booking", "error", err, "org_id", orgID, "contact_id", contact.ID)
@@ -63,6 +77,12 @@ func (a *App) processNestamBookingMessage(account *models.WhatsAppAccount, conta
 		}
 		return true
 	}
+	if isManage {
+		if err := a.startNestamAppointmentManagement(account, contact, profile, location, now); err != nil {
+			a.Log.Error("Failed to restart Nestam AI appointment management", "error", err, "org_id", orgID, "contact_id", contact.ID)
+		}
+		return true
+	}
 
 	switch session.Step {
 	case models.ClinicBookingStepService:
@@ -75,11 +95,22 @@ func (a *App) processNestamBookingMessage(account *models.WhatsAppAccount, conta
 		return a.selectNestamBookingSlot(account, contact, &session, buttonID, profile, location)
 	case models.ClinicBookingStepConfirm:
 		return a.confirmNestamBooking(account, contact, &session, buttonID, profile, location)
+	case models.ClinicBookingStepManage:
+		return a.selectNestamManagedAppointment(account, contact, &session, buttonID, profile, location)
+	case models.ClinicBookingStepManageAction:
+		return a.selectNestamManageAction(account, contact, &session, buttonID, profile, location)
+	case models.ClinicBookingStepCancel:
+		return a.confirmNestamAppointmentCancellation(account, contact, &session, buttonID, profile)
 	default:
 		a.finishNestamBooking(&session, models.ClinicBookingSessionExpired)
 		_ = a.sendAndSaveTextMessage(account, contact, "That booking session has expired. Reply *Book appointment* to begin again.")
 		return true
 	}
+}
+
+func isBookingManageText(text string) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	return text == "manage appointment" || text == "my appointment" || text == "reschedule appointment" || text == "cancel appointment"
 }
 
 func isBookingStartText(text string) bool {
@@ -107,6 +138,91 @@ func (a *App) startNestamBooking(account *models.WhatsAppAccount, contact *model
 		return err
 	}
 	return a.promptNestamBookingServices(account, contact)
+}
+
+func (a *App) startNestamAppointmentManagement(account *models.WhatsAppAccount, contact *models.Contact, profile models.ClinicProfile, location *time.Location, now time.Time) error {
+	var appointments []models.ClinicAppointment
+	if err := a.DB.Where("organization_id = ? AND whatsapp_account = ? AND contact_id = ? AND status IN ? AND starts_at > ?", account.OrganizationID, account.Name, contact.ID, []models.AppointmentStatus{models.AppointmentStatusPending, models.AppointmentStatusConfirmed}, now).Order("starts_at ASC").Limit(9).Find(&appointments).Error; err != nil {
+		return err
+	}
+	if len(appointments) == 0 {
+		return a.sendAndSaveTextMessage(account, contact, "You do not have an upcoming appointment to manage. Reply *Book appointment* to make one.")
+	}
+	if err := a.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.ClinicBookingSession{}).Where("organization_id = ? AND whatsapp_account = ? AND contact_id = ? AND status = ?", account.OrganizationID, account.Name, contact.ID, models.ClinicBookingSessionActive).Updates(map[string]any{"status": models.ClinicBookingSessionCancelled, "completed_at": now}).Error; err != nil {
+			return err
+		}
+		session := models.ClinicBookingSession{BaseModel: models.BaseModel{ID: uuid.New()}, OrganizationID: account.OrganizationID, WhatsAppAccount: account.Name, ContactID: contact.ID, Step: models.ClinicBookingStepManage, Status: models.ClinicBookingSessionActive, ExpiresAt: now.Add(15 * time.Minute)}
+		return tx.Create(&session).Error
+	}); err != nil {
+		return err
+	}
+	buttons := make([]map[string]any, 0, len(appointments)+1)
+	for _, appointment := range appointments {
+		local := appointment.StartsAt.In(location)
+		buttons = append(buttons, map[string]any{"id": "nestam_manage_appointment:" + appointment.ID.String(), "title": local.Format("Mon 02, 03:04 PM")})
+	}
+	buttons = append(buttons, map[string]any{"id": bookingCancelID, "title": "Cancel"})
+	return a.sendAndSaveInteractiveButtons(account, contact, "Please choose the appointment you want to manage.", buttons)
+}
+
+func (a *App) selectNestamManagedAppointment(account *models.WhatsAppAccount, contact *models.Contact, session *models.ClinicBookingSession, buttonID string, profile models.ClinicProfile, location *time.Location) bool {
+	value, ok := strings.CutPrefix(buttonID, "nestam_manage_appointment:")
+	if !ok {
+		_ = a.sendAndSaveTextMessage(account, contact, "Please select an appointment from the list, or tap Cancel.")
+		return true
+	}
+	appointmentID, err := uuid.Parse(value)
+	if err != nil {
+		return true
+	}
+	appointment, err := a.loadManagedAppointment(account, contact, appointmentID)
+	if err != nil {
+		_ = a.sendAndSaveTextMessage(account, contact, "That appointment is no longer available to manage.")
+		return true
+	}
+	if err := a.DB.Model(session).Updates(map[string]any{"appointment_id": appointment.ID, "service_id": appointment.ServiceID, "practitioner_id": appointment.PractitionerID, "step": models.ClinicBookingStepManageAction, "expires_at": time.Now().UTC().Add(15 * time.Minute)}).Error; err != nil {
+		return true
+	}
+	session.AppointmentID, session.ServiceID, session.PractitionerID, session.Step = &appointment.ID, appointment.ServiceID, &appointment.PractitionerID, models.ClinicBookingStepManageAction
+	message := fmt.Sprintf("Your appointment is on %s at %s. What would you like to do?", appointment.StartsAt.In(location).Format("Mon, 02 Jan"), appointment.StartsAt.In(location).Format("03:04 PM"))
+	_ = profile // cutoff is checked at the action and confirmation boundary.
+	_ = a.sendAndSaveInteractiveButtons(account, contact, message, []map[string]any{{"id": manageReschedule, "title": "Reschedule"}, {"id": manageCancel, "title": "Cancel appointment"}, {"id": bookingCancelID, "title": "Back"}})
+	return true
+}
+
+func (a *App) selectNestamManageAction(account *models.WhatsAppAccount, contact *models.Contact, session *models.ClinicBookingSession, buttonID string, profile models.ClinicProfile, location *time.Location) bool {
+	if session.AppointmentID == nil {
+		return true
+	}
+	appointment, err := a.loadManagedAppointment(account, contact, *session.AppointmentID)
+	if err != nil {
+		return true
+	}
+	if !appointment.StartsAt.After(time.Now().UTC().Add(time.Duration(profile.CancellationCutoffMins) * time.Minute)) {
+		_ = a.sendAndSaveTextMessage(account, contact, "This appointment is too close to its start time for self-service changes. Please contact reception.")
+		a.finishNestamBooking(session, models.ClinicBookingSessionCancelled)
+		return true
+	}
+	switch buttonID {
+	case manageReschedule:
+		if appointment.ServiceID == nil {
+			_ = a.sendAndSaveTextMessage(account, contact, "Please contact reception to reschedule this appointment.")
+			return true
+		}
+		if err := a.DB.Model(session).Updates(map[string]any{"selected_starts_at": nil, "step": models.ClinicBookingStepDate, "expires_at": time.Now().UTC().Add(15 * time.Minute)}).Error; err == nil {
+			session.SelectedStartsAt, session.Step = nil, models.ClinicBookingStepDate
+			_ = a.promptNestamBookingDates(account, contact, session, profile, location)
+		}
+	case manageCancel:
+		if err := a.DB.Model(session).Updates(map[string]any{"step": models.ClinicBookingStepCancel, "expires_at": time.Now().UTC().Add(15 * time.Minute)}).Error; err == nil {
+			session.Step = models.ClinicBookingStepCancel
+			_ = a.sendAndSaveInteractiveButtons(account, contact, "Are you sure you want to cancel this appointment?", []map[string]any{{"id": manageCancelOK, "title": "Yes, cancel"}, {"id": manageKeep, "title": "Keep appointment"}})
+		}
+	default:
+		_ = a.sendAndSaveTextMessage(account, contact, "Please choose Reschedule or Cancel appointment.")
+	}
+	return true
 }
 
 func (a *App) promptNestamBookingServices(account *models.WhatsAppAccount, contact *models.Contact) error {
@@ -212,7 +328,7 @@ func (a *App) selectNestamBookingPractitioner(account *models.WhatsAppAccount, c
 }
 
 func (a *App) promptNestamBookingDates(account *models.WhatsAppAccount, contact *models.Contact, session *models.ClinicBookingSession, profile models.ClinicProfile, location *time.Location) error {
-	service, practitioner, err := a.bookingResources(session)
+	practitioner, duration, buffer, err := a.bookingSlotConfiguration(session)
 	if err != nil {
 		return err
 	}
@@ -221,7 +337,7 @@ func (a *App) promptNestamBookingDates(account *models.WhatsAppAccount, contact 
 	buttons := make([]map[string]any, 0, 4)
 	for offset := 0; offset <= profile.AdvanceBookingDays && len(buttons) < 3; offset++ {
 		date := first.AddDate(0, 0, offset)
-		slots, err := a.availableClinicSlots(session.OrganizationID, practitioner.ID, profile, location, date, service.DurationMins, service.BufferMins)
+		slots, err := a.availableClinicSlots(session.OrganizationID, practitioner.ID, profile, location, date, duration, buffer)
 		if err != nil {
 			return err
 		}
@@ -254,13 +370,13 @@ func (a *App) selectNestamBookingDate(account *models.WhatsAppAccount, contact *
 		_ = a.promptNestamBookingDates(account, contact, session, profile, location)
 		return true
 	}
-	service, practitioner, err := a.bookingResources(session)
+	practitioner, duration, buffer, err := a.bookingSlotConfiguration(session)
 	if err != nil {
 		a.finishNestamBooking(session, models.ClinicBookingSessionExpired)
 		_ = a.sendAndSaveTextMessage(account, contact, "Your booking session has expired. Reply *Book appointment* to begin again.")
 		return true
 	}
-	slots, err := a.availableClinicSlots(session.OrganizationID, practitioner.ID, profile, location, date, service.DurationMins, service.BufferMins)
+	slots, err := a.availableClinicSlots(session.OrganizationID, practitioner.ID, profile, location, date, duration, buffer)
 	if err != nil {
 		a.Log.Error("Failed to calculate WhatsApp booking slots", "error", err, "session_id", session.ID)
 		return true
@@ -301,7 +417,7 @@ func (a *App) selectNestamBookingSlot(account *models.WhatsAppAccount, contact *
 		return true
 	}
 	startsAt := time.Unix(unix, 0).UTC()
-	service, practitioner, err := a.bookingResources(session)
+	practitioner, duration, buffer, err := a.bookingSlotConfiguration(session)
 	if err != nil {
 		return true
 	}
@@ -309,7 +425,7 @@ func (a *App) selectNestamBookingSlot(account *models.WhatsAppAccount, contact *
 	if err != nil {
 		return true
 	}
-	slots, err := a.availableClinicSlots(session.OrganizationID, practitioner.ID, profile, location, date, service.DurationMins, service.BufferMins)
+	slots, err := a.availableClinicSlots(session.OrganizationID, practitioner.ID, profile, location, date, duration, buffer)
 	if err != nil || !slotExists(slots, startsAt) {
 		_ = a.sendAndSaveTextMessage(account, contact, "That time is no longer available. Please choose another date.")
 		_ = a.DB.Model(session).Update("step", models.ClinicBookingStepDate).Error
@@ -343,6 +459,9 @@ func (a *App) confirmNestamBooking(account *models.WhatsAppAccount, contact *mod
 	if session.SelectedStartsAt == nil {
 		return true
 	}
+	if session.AppointmentID != nil {
+		return a.confirmNestamAppointmentReschedule(account, contact, session, profile, location)
+	}
 	appointment, err := a.createWhatsAppClinicAppointment(account, contact, session, profile, location)
 	if err != nil {
 		if isClinicBookingConflict(err) || err == errSlotNoLongerAvailable {
@@ -365,6 +484,7 @@ func (a *App) confirmNestamBooking(account *models.WhatsAppAccount, contact *mod
 }
 
 var errSlotNoLongerAvailable = errValidation("selected slot is no longer available")
+var errSelfServiceCutoff = errValidation("self-service change cutoff reached")
 
 func (a *App) createWhatsAppClinicAppointment(account *models.WhatsAppAccount, contact *models.Contact, session *models.ClinicBookingSession, profile models.ClinicProfile, location *time.Location) (*models.ClinicAppointment, error) {
 	service, practitioner, err := a.bookingResources(session)
@@ -417,6 +537,142 @@ func (a *App) bookingResources(session *models.ClinicBookingSession) (*models.Cl
 		return nil, nil, err
 	}
 	return &service, &practitioner, nil
+}
+
+func (a *App) bookingSlotConfiguration(session *models.ClinicBookingSession) (*models.ClinicPractitioner, int, int, error) {
+	if session.AppointmentID != nil {
+		var appointment models.ClinicAppointment
+		if err := a.DB.Where("id = ? AND organization_id = ? AND status IN ?", *session.AppointmentID, session.OrganizationID, []models.AppointmentStatus{models.AppointmentStatusPending, models.AppointmentStatusConfirmed}).First(&appointment).Error; err != nil {
+			return nil, 0, 0, err
+		}
+		var practitioner models.ClinicPractitioner
+		if err := a.DB.Where("id = ? AND organization_id = ? AND is_active = ?", appointment.PractitionerID, session.OrganizationID, true).First(&practitioner).Error; err != nil {
+			return nil, 0, 0, err
+		}
+		duration := int(appointment.EndsAt.Sub(appointment.StartsAt).Minutes())
+		if duration <= 0 {
+			return nil, 0, 0, errSlotNoLongerAvailable
+		}
+		return &practitioner, duration, 0, nil
+	}
+	service, practitioner, err := a.bookingResources(session)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	return practitioner, service.DurationMins, service.BufferMins, nil
+}
+
+func (a *App) loadManagedAppointment(account *models.WhatsAppAccount, contact *models.Contact, appointmentID uuid.UUID) (*models.ClinicAppointment, error) {
+	var appointment models.ClinicAppointment
+	err := a.DB.Where("id = ? AND organization_id = ? AND whatsapp_account = ? AND contact_id = ? AND status IN ? AND starts_at > ?", appointmentID, account.OrganizationID, account.Name, contact.ID, []models.AppointmentStatus{models.AppointmentStatusPending, models.AppointmentStatusConfirmed}, time.Now().UTC()).First(&appointment).Error
+	if err != nil {
+		return nil, err
+	}
+	return &appointment, nil
+}
+
+func (a *App) confirmNestamAppointmentReschedule(account *models.WhatsAppAccount, contact *models.Contact, session *models.ClinicBookingSession, profile models.ClinicProfile, location *time.Location) bool {
+	appointment, err := a.loadManagedAppointment(account, contact, *session.AppointmentID)
+	if err != nil || session.SelectedStartsAt == nil || !appointment.StartsAt.After(time.Now().UTC().Add(time.Duration(profile.CancellationCutoffMins)*time.Minute)) {
+		_ = a.sendAndSaveTextMessage(account, contact, "This appointment can no longer be changed online. Please contact reception.")
+		return true
+	}
+	date, err := clinicDateWithinWindow(*session.SelectedStartsAt, location, profile.AdvanceBookingDays)
+	if err != nil {
+		return true
+	}
+	duration := int(appointment.EndsAt.Sub(appointment.StartsAt).Minutes())
+	slots, err := a.availableClinicSlots(session.OrganizationID, appointment.PractitionerID, profile, location, date, duration, 0)
+	if err != nil || !slotExists(slots, *session.SelectedStartsAt) {
+		_ = a.sendAndSaveTextMessage(account, contact, "That time is no longer available. Please choose another date.")
+		return true
+	}
+	var selected clinic.Slot
+	for _, slot := range slots {
+		if slot.StartsAt.Equal(*session.SelectedStartsAt) {
+			selected = slot
+			break
+		}
+	}
+	err = a.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND organization_id = ? AND whatsapp_account = ? AND contact_id = ?", appointment.ID, account.OrganizationID, account.Name, contact.ID).First(appointment).Error; err != nil {
+			return err
+		}
+		if !isActiveAppointmentStatus(appointment.Status) {
+			return errAppointmentNotActive
+		}
+		if !appointment.StartsAt.After(time.Now().UTC().Add(time.Duration(profile.CancellationCutoffMins) * time.Minute)) {
+			return errSelfServiceCutoff
+		}
+		oldStart := appointment.StartsAt
+		appointment.StartsAt, appointment.EndsAt = selected.StartsAt, selected.EndsAt
+		if err := tx.Save(appointment).Error; err != nil {
+			return err
+		}
+		event := models.ClinicAppointmentEvent{BaseModel: models.BaseModel{ID: uuid.New()}, OrganizationID: account.OrganizationID, AppointmentID: appointment.ID, EventType: models.AppointmentEventRescheduled, Payload: models.JSONB{"old_starts_at": oldStart.Format(time.RFC3339), "starts_at": appointment.StartsAt.Format(time.RFC3339), "ends_at": appointment.EndsAt.Format(time.RFC3339)}}
+		return tx.Create(&event).Error
+	})
+	if err != nil {
+		if isClinicBookingConflict(err) || err == errAppointmentNotActive || err == errSelfServiceCutoff {
+			_ = a.sendAndSaveTextMessage(account, contact, "That appointment or time is no longer available. Please contact reception.")
+			return true
+		}
+		a.Log.Error("Failed to reschedule WhatsApp appointment", "error", err, "appointment_id", appointment.ID)
+		return true
+	}
+	a.finishNestamBooking(session, models.ClinicBookingSessionCompleted)
+	message := fmt.Sprintf("Your appointment has been moved to %s at %s.", appointment.StartsAt.In(location).Format("Mon, 02 Jan"), appointment.StartsAt.In(location).Format("03:04 PM"))
+	_ = a.sendAndSaveTextMessage(account, contact, message)
+	return true
+}
+
+func (a *App) confirmNestamAppointmentCancellation(account *models.WhatsAppAccount, contact *models.Contact, session *models.ClinicBookingSession, buttonID string, profile models.ClinicProfile) bool {
+	if buttonID == manageKeep {
+		a.finishNestamBooking(session, models.ClinicBookingSessionCompleted)
+		_ = a.sendAndSaveTextMessage(account, contact, "Your appointment has not been changed.")
+		return true
+	}
+	if buttonID != manageCancelOK {
+		_ = a.sendAndSaveTextMessage(account, contact, "Please tap Yes, cancel or Keep appointment.")
+		return true
+	}
+	if session.AppointmentID == nil {
+		return true
+	}
+	appointment, err := a.loadManagedAppointment(account, contact, *session.AppointmentID)
+	if err != nil || !appointment.StartsAt.After(time.Now().UTC().Add(time.Duration(profile.CancellationCutoffMins)*time.Minute)) {
+		_ = a.sendAndSaveTextMessage(account, contact, "This appointment can no longer be cancelled online. Please contact reception.")
+		return true
+	}
+	now := time.Now().UTC()
+	err = a.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND organization_id = ? AND whatsapp_account = ? AND contact_id = ?", appointment.ID, account.OrganizationID, account.Name, contact.ID).First(appointment).Error; err != nil {
+			return err
+		}
+		if !isActiveAppointmentStatus(appointment.Status) {
+			return errAppointmentNotActive
+		}
+		if !appointment.StartsAt.After(time.Now().UTC().Add(time.Duration(profile.CancellationCutoffMins) * time.Minute)) {
+			return errSelfServiceCutoff
+		}
+		appointment.Status, appointment.CancelledAt, appointment.CancellationReason = models.AppointmentStatusCancelled, &now, "Cancelled by patient through WhatsApp"
+		if err := tx.Save(appointment).Error; err != nil {
+			return err
+		}
+		event := models.ClinicAppointmentEvent{BaseModel: models.BaseModel{ID: uuid.New()}, OrganizationID: account.OrganizationID, AppointmentID: appointment.ID, EventType: models.AppointmentEventCancelled, Payload: models.JSONB{"source": "whatsapp_patient"}}
+		return tx.Create(&event).Error
+	})
+	if err != nil {
+		if err == errSelfServiceCutoff || err == errAppointmentNotActive {
+			_ = a.sendAndSaveTextMessage(account, contact, "This appointment can no longer be cancelled online. Please contact reception.")
+			return true
+		}
+		a.Log.Error("Failed to cancel WhatsApp appointment", "error", err, "appointment_id", appointment.ID)
+		return true
+	}
+	a.finishNestamBooking(session, models.ClinicBookingSessionCompleted)
+	_ = a.sendAndSaveTextMessage(account, contact, "Your appointment has been cancelled. Reply *Book appointment* whenever you would like to make a new booking.")
+	return true
 }
 
 func slotExists(slots []clinic.Slot, startsAt time.Time) bool {
