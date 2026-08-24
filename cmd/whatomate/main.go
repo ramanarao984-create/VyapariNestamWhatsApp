@@ -837,6 +837,10 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/clinic/practitioners", app.CreateClinicPractitioner)
 	g.GET("/api/clinic/services", app.ListClinicServices)
 	g.POST("/api/clinic/services", app.CreateClinicService)
+	g.GET("/api/clinic/practitioners/{id}/availability", app.ListClinicAvailabilityRules)
+	g.POST("/api/clinic/practitioners/{id}/availability", app.CreateClinicAvailabilityRule)
+	g.GET("/api/clinic/practitioners/{id}/slots", app.ListClinicAvailableSlots)
+	g.POST("/api/clinic/appointments", app.CreateClinicAppointment)
 
 	// Teams (admin/manager - access control in handler)
 	g.GET("/api/teams", app.ListTeams)

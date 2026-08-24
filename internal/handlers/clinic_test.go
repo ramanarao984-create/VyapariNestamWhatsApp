@@ -1,0 +1,43 @@
+package handlers
+
+import (
+	"errors"
+	"strings"
+	"testing"
+)
+
+func TestValidateClinicAvailabilityRuleRequest(t *testing.T) {
+	valid := ClinicAvailabilityRuleRequest{DayOfWeek: 1, StartMinute: 9 * 60, EndMinute: 17 * 60, SlotIntervalMinutes: 15}
+	if err := validateClinicAvailabilityRuleRequest(valid); err != nil {
+		t.Fatalf("valid availability rule rejected: %v", err)
+	}
+
+	invalid := valid
+	invalid.EndMinute = invalid.StartMinute
+	if err := validateClinicAvailabilityRuleRequest(invalid); err == nil {
+		t.Fatal("zero-length availability window was accepted")
+	}
+}
+
+func TestValidateCreateClinicAppointmentRequest(t *testing.T) {
+	valid := CreateClinicAppointmentRequest{
+		WhatsAppAccount: "clinic", ContactID: "contact", PractitionerID: "practitioner", StartsAt: "2026-08-24T10:00:00Z",
+	}
+	if err := validateCreateClinicAppointmentRequest(valid); err != nil {
+		t.Fatalf("valid appointment request rejected: %v", err)
+	}
+
+	valid.ReceptionNote = strings.Repeat("x", 1001)
+	if err := validateCreateClinicAppointmentRequest(valid); err == nil {
+		t.Fatal("oversized receptionist note was accepted")
+	}
+}
+
+func TestIsClinicBookingConflict(t *testing.T) {
+	if !isClinicBookingConflict(errors.New("ERROR: conflicting key value violates exclusion constraint clinic_appointments_active_interval_excl")) {
+		t.Fatal("exclusion constraint conflict was not detected")
+	}
+	if isClinicBookingConflict(errors.New("database connection unavailable")) {
+		t.Fatal("unrelated database error was treated as a booking conflict")
+	}
+}
