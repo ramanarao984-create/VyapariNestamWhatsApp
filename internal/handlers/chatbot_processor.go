@@ -211,6 +211,9 @@ func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextM
 		return
 	}
 	if !settings.IsEnabled {
+		if a.processNestamBookingMessage(account, contact, messageText, buttonID) {
+			return
+		}
 		a.Log.Debug("Chatbot not enabled for this account, creating transfer for agent queue", "account", account.Name, "settings_id", settings.ID)
 		// Create transfer to agent queue when chatbot is disabled
 		a.createTransferToQueue(account, contact, models.TransferSourceChatbotDisabled)
@@ -273,6 +276,12 @@ func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextM
 			}
 		}
 		a.createTransferFromKeyword(account, contact)
+		return
+	}
+
+	// An explicit Nestam AI booking action takes priority over a generic flow.
+	// It is fully deterministic and uses its own tenant-scoped session state.
+	if a.processNestamBookingMessage(account, contact, messageText, buttonID) {
 		return
 	}
 

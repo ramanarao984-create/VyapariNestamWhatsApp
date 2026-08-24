@@ -123,3 +123,22 @@ type ClinicAppointmentEvent struct {
 }
 
 func (ClinicAppointmentEvent) TableName() string { return "clinic_appointment_events" }
+
+// ClinicBookingSession is a short-lived WhatsApp state machine containing
+// only opaque IDs and a selected operational time. It intentionally stores no
+// message transcripts, medical details, or arbitrary user-provided metadata.
+type ClinicBookingSession struct {
+	BaseModel
+	OrganizationID   uuid.UUID                  `gorm:"type:uuid;index;not null" json:"organization_id"`
+	WhatsAppAccount  string                     `gorm:"size:100;index;not null" json:"whatsapp_account"`
+	ContactID        uuid.UUID                  `gorm:"type:uuid;index;not null" json:"contact_id"`
+	ServiceID        *uuid.UUID                 `gorm:"type:uuid;index" json:"service_id,omitempty"`
+	PractitionerID   *uuid.UUID                 `gorm:"type:uuid;index" json:"practitioner_id,omitempty"`
+	SelectedStartsAt *time.Time                 `json:"selected_starts_at,omitempty"`
+	Step             ClinicBookingStep          `gorm:"size:20;not null" json:"step"`
+	Status           ClinicBookingSessionStatus `gorm:"size:20;not null;default:'active'" json:"status"`
+	ExpiresAt        time.Time                  `gorm:"not null" json:"expires_at"`
+	CompletedAt      *time.Time                 `json:"completed_at,omitempty"`
+}
+
+func (ClinicBookingSession) TableName() string { return "clinic_booking_sessions" }

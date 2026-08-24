@@ -199,6 +199,28 @@ const (
 	AppointmentEventNoShow      AppointmentEventType = "no_show"
 )
 
+// ClinicBookingSessionStatus controls the short-lived, deterministic WhatsApp
+// booking journey. It is separate from generic chatbot sessions so no clinical
+// or cross-feature context can enter appointment selection.
+type ClinicBookingSessionStatus string
+
+const (
+	ClinicBookingSessionActive    ClinicBookingSessionStatus = "active"
+	ClinicBookingSessionCompleted ClinicBookingSessionStatus = "completed"
+	ClinicBookingSessionCancelled ClinicBookingSessionStatus = "cancelled"
+	ClinicBookingSessionExpired   ClinicBookingSessionStatus = "expired"
+)
+
+type ClinicBookingStep string
+
+const (
+	ClinicBookingStepService      ClinicBookingStep = "service"
+	ClinicBookingStepPractitioner ClinicBookingStep = "practitioner"
+	ClinicBookingStepDate         ClinicBookingStep = "date"
+	ClinicBookingStepSlot         ClinicBookingStep = "slot"
+	ClinicBookingStepConfirm      ClinicBookingStep = "confirm"
+)
+
 // InputType represents chatbot flow step input types
 type InputType string
 
