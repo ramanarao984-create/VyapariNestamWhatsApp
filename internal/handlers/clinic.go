@@ -78,6 +78,36 @@ type ClinicWaitlistRequest struct {
 	ServiceID       *string `json:"service_id"`
 }
 
+// GetClinicAutomationReadiness exposes only operational go-live checks for the
+// authenticated tenant. It intentionally never exposes credentials, message
+// contents, contacts, or data from another organization.
+func (a *App) GetClinicAutomationReadiness(r *fastglue.Request) error {
+	orgID, _, err := a.requireAuth(r, models.ResourceClinic, models.ActionRead)
+	if err != nil {
+		return nil
+	}
+	checks := map[string]bool{"clinic_profile": false, "booking_enabled": false, "whatsapp_account": false, "practitioner": false, "availability": false, "reminder_template": false}
+	var profile models.ClinicProfile
+	if err := a.DB.Where("organization_id = ?", orgID).First(&profile).Error; err == nil {
+		checks["clinic_profile"] = true
+		checks["booking_enabled"] = profile.BookingEnabled
+		if profile.ReminderEnabled && profile.ReminderTemplateID != nil {
+			var count int64
+			a.DB.Model(&models.Template{}).Where("id = ? AND organization_id = ? AND status = ? AND category = ?", *profile.ReminderTemplateID, orgID, string(models.TemplateStatusApproved), string(models.TemplateCategoryUtility)).Count(&count)
+			checks["reminder_template"] = count == 1
+		}
+	}
+	var count int64
+	a.DB.Model(&models.WhatsAppAccount{}).Where("organization_id = ? AND phone_id <> '' AND access_token <> ''", orgID).Count(&count)
+	checks["whatsapp_account"] = count > 0
+	a.DB.Model(&models.ClinicPractitioner{}).Where("organization_id = ? AND is_active = ?", orgID, true).Count(&count)
+	checks["practitioner"] = count > 0
+	a.DB.Model(&models.ClinicAvailabilityRule{}).Where("organization_id = ? AND is_active = ?", orgID, true).Count(&count)
+	checks["availability"] = count > 0
+	ready := checks["clinic_profile"] && checks["booking_enabled"] && checks["whatsapp_account"] && checks["practitioner"] && checks["availability"]
+	return r.SendEnvelope(map[string]any{"ready_for_booking": ready, "checks": checks, "reminders_ready": !profile.ReminderEnabled || checks["reminder_template"]})
+}
+
 // GetClinicProfile returns the caller's tenant-scoped Nestam AI clinic setup.
 // A missing profile is a normal onboarding state, not an error.
 func (a *App) GetClinicProfile(r *fastglue.Request) error {
