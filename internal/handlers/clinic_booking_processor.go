@@ -671,6 +671,7 @@ func (a *App) confirmNestamAppointmentCancellation(account *models.WhatsAppAccou
 		return true
 	}
 	a.finishNestamBooking(session, models.ClinicBookingSessionCompleted)
+	go a.offerNestamWaitlistSlot(*appointment)
 	_ = a.sendAndSaveTextMessage(account, contact, "Your appointment has been cancelled. Reply *Book appointment* whenever you would like to make a new booking.")
 	return true
 }

@@ -361,6 +361,9 @@ func runServer(args []string) {
 	reminderProcessor := handlers.NewClinicReminderProcessor(app, time.Minute)
 	go reminderProcessor.Start(slaCtx)
 	lo.Info("Nestam AI reminder processor started")
+	waitlistProcessor := handlers.NewClinicWaitlistProcessor(app, time.Minute)
+	go waitlistProcessor.Start(slaCtx)
+	lo.Info("Nestam AI waitlist processor started")
 	if cfg.Calling.RecordingRetentionDays > 0 {
 		app.CallManager.StartRecordingRetention(slaCtx)
 	}

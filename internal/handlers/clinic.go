@@ -890,6 +890,9 @@ func (a *App) RescheduleClinicAppointment(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to reschedule appointment", nil, "")
 	}
 	a.logAudit(orgID, userID, "clinic_appointment", appointment.ID, models.AuditActionUpdated, &oldAppointment, &appointment)
+	// The cancellation is committed before an offer is considered. The worker
+	// performs an atomic claim, so concurrent cancellations cannot double-offer.
+	go a.offerNestamWaitlistSlot(appointment)
 	return r.SendEnvelope(appointment)
 }
 

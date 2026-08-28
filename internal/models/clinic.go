@@ -172,6 +172,7 @@ type ClinicWaitlistEntry struct {
 	ServiceID       *uuid.UUID           `gorm:"type:uuid;index" json:"service_id,omitempty"`
 	Status          ClinicWaitlistStatus `gorm:"size:20;not null;default:'waiting'" json:"status"`
 	OfferStartsAt   *time.Time           `json:"offer_starts_at,omitempty"`
+	OfferEndsAt     *time.Time           `json:"offer_ends_at,omitempty"`
 	OfferExpiresAt  *time.Time           `json:"offer_expires_at,omitempty"`
 	RespondedAt     *time.Time           `json:"responded_at,omitempty"`
 }
