@@ -204,6 +204,12 @@ const router = createRouter({
           meta: { permission: 'contacts' }
         },
         {
+          path: 'clinic',
+          name: 'clinic',
+          component: () => import('@/views/clinic/ClinicWorkspaceView.vue'),
+          meta: { permission: 'clinic' }
+        },
+        {
           path: 'contacts/:id',
           name: 'contact-detail',
           component: () => import('@/views/settings/ContactDetailView.vue'),
@@ -351,6 +357,7 @@ const navigationOrder = [
   { path: '/', permission: 'analytics' },
   { path: '/chat', permission: 'chat' },
   { path: '/contacts', permission: 'contacts' },
+  { path: '/clinic', permission: 'clinic' },
   { path: '/chatbot', permission: 'settings.chatbot', childPaths: [
     { path: '/chatbot', permission: 'settings.chatbot' },
     { path: '/chatbot/keywords', permission: 'chatbot.keywords' },

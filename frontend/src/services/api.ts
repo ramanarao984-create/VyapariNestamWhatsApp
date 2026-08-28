@@ -203,6 +203,25 @@ export const contactsService = {
   markRead: (id: string) => api.post(`/contacts/${encodeURIComponent(id)}/mark-read`)
 }
 
+export interface ClinicProfile { id: string; display_name: string; timezone: string; address: string; reception_phone: string; booking_enabled: boolean; default_slot_minutes: number; advance_booking_days: number; minimum_notice_minutes: number; cancellation_cutoff_minutes: number }
+export interface ClinicAppointment { id: string; contact?: { profile_name?: string; phone_number?: string }; practitioner?: { display_name?: string }; service?: { name?: string }; starts_at: string; ends_at: string; status: string; source: string }
+export interface ClinicWaitlistEntry { id: string; status: string; offer_starts_at?: string; offer_expires_at?: string; contact_id: string }
+export interface ClinicPractitioner { id: string; display_name: string; department: string; is_active: boolean }
+export interface ClinicService { id: string; name: string; description: string; duration_minutes: number; buffer_minutes: number; is_active: boolean }
+export interface ClinicSlot { starts_at: string; ends_at: string }
+export const clinicService = {
+  getProfile: () => api.get<{ configured: boolean; profile?: ClinicProfile }>('/clinic/profile'),
+  updateProfile: (data: Omit<ClinicProfile, 'id'>) => api.put<ClinicProfile>('/clinic/profile', data),
+  listAppointments: (params: { from: string; to: string; status?: string }) => api.get<{ timezone: string; appointments: ClinicAppointment[] }>('/clinic/appointments', { params }),
+  listWaitlist: () => api.get<{ entries: ClinicWaitlistEntry[] }>('/clinic/waitlist'),
+  listPractitioners: () => api.get<{ practitioners: ClinicPractitioner[] }>('/clinic/practitioners'),
+  createPractitioner: (data: { display_name: string; department: string }) => api.post<ClinicPractitioner>('/clinic/practitioners', data),
+  listServices: () => api.get<{ services: ClinicService[] }>('/clinic/services'),
+  createService: (data: { name: string; description: string; duration_minutes: number; buffer_minutes: number }) => api.post<ClinicService>('/clinic/services', data),
+  listSlots: (practitionerId: string, params: { date: string; service_id?: string }) => api.get<{ slots: ClinicSlot[] }>(`/clinic/practitioners/${practitionerId}/slots`, { params }),
+  createAppointment: (data: { whatsapp_account: string; contact_id: string; practitioner_id: string; service_id?: string; starts_at: string }) => api.post<ClinicAppointment>('/clinic/appointments', data),
+}
+
 // Generic Import/Export Service
 export interface ExportColumn {
   key: string

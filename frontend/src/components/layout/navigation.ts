@@ -21,7 +21,8 @@ import {
   Tags,
   PhoneCall,
   PhoneForwarded,
-  ScrollText
+  ScrollText,
+  CalendarDays
 } from 'lucide-vue-next'
 import type { Component } from 'vue'
 
@@ -46,7 +47,7 @@ export interface NavSection {
 export const navigationSections: NavSection[] = [
   {
     label: 'nav.sectionMain',
-    permissions: ['analytics', 'chat', 'contacts'],
+    permissions: ['analytics', 'chat', 'contacts', 'clinic'],
     items: [
       {
         name: 'nav.dashboard',
@@ -66,6 +67,7 @@ export const navigationSections: NavSection[] = [
         icon: Contact,
         permission: 'contacts'
       },
+      { name: 'nav.clinic', path: '/clinic', icon: CalendarDays, permission: 'clinic' },
     ]
   },
   {
