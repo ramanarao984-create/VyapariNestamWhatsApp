@@ -218,6 +218,8 @@ export const clinicService = {
   createPractitioner: (data: { display_name: string; department: string }) => api.post<ClinicPractitioner>('/clinic/practitioners', data),
   listServices: () => api.get<{ services: ClinicService[] }>('/clinic/services'),
   createService: (data: { name: string; description: string; duration_minutes: number; buffer_minutes: number }) => api.post<ClinicService>('/clinic/services', data),
+  listAvailability: (practitionerId: string) => api.get<{ availability_rules: Array<{ id: string; day_of_week: number; start_minute: number; end_minute: number; slot_interval_minutes: number }> }>(`/clinic/practitioners/${practitionerId}/availability`),
+  createAvailability: (practitionerId: string, data: { day_of_week: number; start_minute: number; end_minute: number; slot_interval_minutes: number }) => api.post(`/clinic/practitioners/${practitionerId}/availability`, data),
   listSlots: (practitionerId: string, params: { date: string; service_id?: string }) => api.get<{ slots: ClinicSlot[] }>(`/clinic/practitioners/${practitionerId}/slots`, { params }),
   createAppointment: (data: { whatsapp_account: string; contact_id: string; practitioner_id: string; service_id?: string; starts_at: string }) => api.post<ClinicAppointment>('/clinic/appointments', data),
 }
