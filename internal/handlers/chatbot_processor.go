@@ -196,17 +196,18 @@ func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextM
 	// Clear chatbot tracking since client has replied
 	a.ClearContactChatbotTracking(contact.ID)
 
-	// Waitlist offers are deterministic, tenant-scoped controls and must work
-	// even when the generic chatbot is disabled.
-	if a.processNestamWaitlistOfferMessage(account, contact, buttonID) {
-		return
-	}
-
-	// Check for active agent transfer - skip chatbot processing if transferred
+	// A human handoff owns the conversation. No deterministic booking or
+	// waitlist action may bypass an active reception transfer.
 	if a.hasActiveAgentTransfer(account.OrganizationID, contact.ID) {
 		a.Log.Info("Contact has active agent transfer, skipping chatbot processing",
 			"contact_id", contact.ID,
 			"phone_number", contact.PhoneNumber)
+		return
+	}
+
+	// Waitlist offers are deterministic, tenant-scoped controls and must work
+	// even when the generic chatbot is disabled.
+	if a.processNestamWaitlistOfferMessage(account, contact, buttonID) {
 		return
 	}
 
