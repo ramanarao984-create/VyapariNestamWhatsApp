@@ -204,7 +204,7 @@ export const contactsService = {
 }
 
 export interface ClinicProfile { id: string; display_name: string; timezone: string; address: string; reception_phone: string; booking_enabled: boolean; default_slot_minutes: number; advance_booking_days: number; minimum_notice_minutes: number; cancellation_cutoff_minutes: number }
-export interface ClinicAppointment { id: string; contact?: { profile_name?: string; phone_number?: string }; practitioner?: { display_name?: string }; service?: { name?: string }; starts_at: string; ends_at: string; status: string; source: string }
+export interface ClinicAppointment { id: string; whatsapp_account: string; contact_id: string; practitioner_id: string; service_id?: string; contact?: { profile_name?: string; phone_number?: string }; practitioner?: { display_name?: string }; service?: { name?: string }; starts_at: string; ends_at: string; status: string; source: string }
 export interface ClinicWaitlistEntry { id: string; status: string; offer_starts_at?: string; offer_expires_at?: string; contact_id: string }
 export interface ClinicPractitioner { id: string; display_name: string; department: string; is_active: boolean }
 export interface ClinicService { id: string; name: string; description: string; duration_minutes: number; buffer_minutes: number; is_active: boolean }
@@ -222,6 +222,8 @@ export const clinicService = {
   createAvailability: (practitionerId: string, data: { day_of_week: number; start_minute: number; end_minute: number; slot_interval_minutes: number }) => api.post(`/clinic/practitioners/${practitionerId}/availability`, data),
   listSlots: (practitionerId: string, params: { date: string; service_id?: string }) => api.get<{ slots: ClinicSlot[] }>(`/clinic/practitioners/${practitionerId}/slots`, { params }),
   createAppointment: (data: { whatsapp_account: string; contact_id: string; practitioner_id: string; service_id?: string; starts_at: string }) => api.post<ClinicAppointment>('/clinic/appointments', data),
+  rescheduleAppointment: (id: string, starts_at: string) => api.put(`/clinic/appointments/${id}/reschedule`, { starts_at }),
+  cancelAppointment: (id: string, reason: string) => api.put(`/clinic/appointments/${id}/cancel`, { reason }),
 }
 
 // Generic Import/Export Service
