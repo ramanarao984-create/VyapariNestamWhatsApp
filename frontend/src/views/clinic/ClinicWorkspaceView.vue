@@ -48,9 +48,14 @@ const actions = computed(() => [
 async function load() {
   loading.value = true; failed.value = false
   try {
-    const [p, a, calendar, w] = await Promise.all([clinicService.getProfile(), clinicService.listAppointments({ from: date.value, to: nextDay(date.value) }), clinicService.listAppointments({ from: weekStart(date.value), to: addDays(weekStart(date.value), 7) }), clinicService.listWaitlist()])
+    const p = await clinicService.getProfile()
     profile.value = unpack<{ configured: boolean; profile?: ClinicProfile }>(p).profile || null
-    if (profile.value) Object.assign(profileForm.value, profile.value)
+    if (!profile.value) {
+      appointments.value = []; weekAppointments.value = []; waitlist.value = []
+      return
+    }
+    Object.assign(profileForm.value, profile.value)
+    const [a, calendar, w] = await Promise.all([clinicService.listAppointments({ from: date.value, to: nextDay(date.value) }), clinicService.listAppointments({ from: weekStart(date.value), to: addDays(weekStart(date.value), 7) }), clinicService.listWaitlist()])
     appointments.value = unpack<{ appointments: ClinicAppointment[] }>(a).appointments || []
     weekAppointments.value = unpack<{ appointments: ClinicAppointment[] }>(calendar).appointments || []
     waitlist.value = unpack<{ entries: ClinicWaitlistEntry[] }>(w).entries || []
