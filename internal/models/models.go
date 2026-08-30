@@ -360,7 +360,7 @@ type Contact struct {
 	MarketingOptOut bool `gorm:"default:false" json:"marketing_opt_out"`
 
 	// Business-Scoped User ID (from Meta BSUID rollout)
-	BSUID string `gorm:"size:150;index" json:"bsuid,omitempty"`
+	BSUID string `gorm:"column:bsuid;size:150;index" json:"bsuid,omitempty"`
 
 	// Chatbot SLA tracking
 	ChatbotLastMessageAt *time.Time `json:"chatbot_last_message_at,omitempty"` // When chatbot last sent a message

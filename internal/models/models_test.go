@@ -1,12 +1,45 @@
 package models_test
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm/schema"
 )
+
+// These fields use Go initialisms while the production schema uses legacy
+// column names. Keep their explicit mappings under test: a mismatch makes the
+// whole INSERT fail, including fields the receptionist never entered.
+func TestPersistenceColumnMappings(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		model any
+		field string
+		want  string
+	}{
+		{"contact WhatsApp account", &models.Contact{}, "WhatsAppAccount", "whatsapp_account"},
+		{"contact business scoped user ID", &models.Contact{}, "BSUID", "bsuid"},
+		{"clinic cancellation cutoff", &models.ClinicProfile{}, "CancellationCutoffMins", "cancellation_cutoff_minutes"},
+		{"clinic reminder lead", &models.ClinicProfile{}, "ReminderLeadMins", "reminder_lead_minutes"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			parsed, err := schema.Parse(tt.model, &sync.Map{}, schema.NamingStrategy{})
+			require.NoError(t, err)
+			field := parsed.LookUpField(tt.field)
+			require.NotNil(t, field)
+			assert.Equal(t, tt.want, field.DBName)
+		})
+	}
+}
 
 func TestJSONB_Value(t *testing.T) {
 	t.Parallel()
