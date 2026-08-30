@@ -6,7 +6,7 @@ import "github.com/google/uuid"
 type Catalog struct {
 	BaseModel
 	OrganizationID  uuid.UUID `gorm:"type:uuid;index;not null" json:"organization_id"`
-	WhatsAppAccount string    `gorm:"size:100;index" json:"whatsapp_account"` // Links to WhatsAppAccount.Name
+	WhatsAppAccount string    `gorm:"column:whatsapp_account;size:100;index" json:"whatsapp_account"` // Links to WhatsAppAccount.Name
 	MetaCatalogID   string    `gorm:"size:100;uniqueIndex" json:"meta_catalog_id"`
 	Name            string    `gorm:"size:255;not null" json:"name"`
 	IsActive        bool      `gorm:"default:true" json:"is_active"`

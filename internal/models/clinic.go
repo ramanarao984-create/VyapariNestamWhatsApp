@@ -92,7 +92,7 @@ func (ClinicAvailabilityException) TableName() string { return "clinic_availabil
 type ClinicAppointment struct {
 	BaseModel
 	OrganizationID     uuid.UUID         `gorm:"type:uuid;index;not null" json:"organization_id"`
-	WhatsAppAccount    string            `gorm:"size:100;index;not null" json:"whatsapp_account"`
+	WhatsAppAccount    string            `gorm:"column:whatsapp_account;size:100;index;not null" json:"whatsapp_account"`
 	ContactID          uuid.UUID         `gorm:"type:uuid;index;not null" json:"contact_id"`
 	PractitionerID     uuid.UUID         `gorm:"type:uuid;index;not null" json:"practitioner_id"`
 	ServiceID          *uuid.UUID        `gorm:"type:uuid;index" json:"service_id,omitempty"`
@@ -133,7 +133,7 @@ func (ClinicAppointmentEvent) TableName() string { return "clinic_appointment_ev
 type ClinicBookingSession struct {
 	BaseModel
 	OrganizationID   uuid.UUID                  `gorm:"type:uuid;index;not null" json:"organization_id"`
-	WhatsAppAccount  string                     `gorm:"size:100;index;not null" json:"whatsapp_account"`
+	WhatsAppAccount  string                     `gorm:"column:whatsapp_account;size:100;index;not null" json:"whatsapp_account"`
 	ContactID        uuid.UUID                  `gorm:"type:uuid;index;not null" json:"contact_id"`
 	AppointmentID    *uuid.UUID                 `gorm:"type:uuid;index" json:"appointment_id,omitempty"`
 	ServiceID        *uuid.UUID                 `gorm:"type:uuid;index" json:"service_id,omitempty"`
@@ -166,7 +166,7 @@ func (ClinicAppointmentReminder) TableName() string { return "clinic_appointment
 type ClinicWaitlistEntry struct {
 	BaseModel
 	OrganizationID  uuid.UUID            `gorm:"type:uuid;index;not null" json:"organization_id"`
-	WhatsAppAccount string               `gorm:"size:100;index;not null" json:"whatsapp_account"`
+	WhatsAppAccount string               `gorm:"column:whatsapp_account;size:100;index;not null" json:"whatsapp_account"`
 	ContactID       uuid.UUID            `gorm:"type:uuid;index;not null" json:"contact_id"`
 	PractitionerID  *uuid.UUID           `gorm:"type:uuid;index" json:"practitioner_id,omitempty"`
 	ServiceID       *uuid.UUID           `gorm:"type:uuid;index" json:"service_id,omitempty"`
