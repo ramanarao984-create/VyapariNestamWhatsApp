@@ -774,6 +774,7 @@ func (a *App) ListClinicAppointments(r *fastglue.Request) error {
 	}
 	from, to, err := clinicCalendarRange(r, location)
 	if err != nil {
+		a.Log.Warn("Rejected clinic calendar range", "error", err, "org_id", orgID, "from", string(r.RequestCtx.QueryArgs().Peek("from")), "to", string(r.RequestCtx.QueryArgs().Peek("to")))
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 	}
 	query := a.DB.Where("clinic_appointments.organization_id = ? AND clinic_appointments.starts_at < ? AND clinic_appointments.ends_at > ?", orgID, to, from)

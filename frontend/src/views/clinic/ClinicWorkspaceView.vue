@@ -30,9 +30,14 @@ const profileForm = ref({ display_name: '', timezone: 'Asia/Kolkata', address: '
 const rescheduleDate = ref(date.value); const rescheduleStartsAt = ref(''); const rescheduleSlots = ref<ClinicSlot[]>([]); const cancellationReason = ref('')
 const booking = ref({ whatsapp_account: '', contact_id: '', practitioner_id: '', service_id: '', starts_at: '' })
 const unpack = <T,>(response: any): T => response.data?.data ?? response.data
-const nextDay = (day: string) => { const value = new Date(`${day}T00:00:00`); value.setDate(value.getDate() + 1); return value.toISOString().slice(0, 10) }
-const weekStart = (day: string) => { const value = new Date(`${day}T00:00:00`); value.setDate(value.getDate() - value.getDay()); return value.toISOString().slice(0, 10) }
-const addDays = (day: string, amount: number) => { const value = new Date(`${day}T00:00:00`); value.setDate(value.getDate() + amount); return value.toISOString().slice(0, 10) }
+// Calendar requests use date-only values. UTC arithmetic prevents browser
+// time zones from shifting either endpoint while a receptionist is viewing a
+// week, keeping every request inside the API's 31-day safety boundary.
+const utcDate = (day: string) => { const [year, month, date] = day.split('-').map(Number); return new Date(Date.UTC(year, month - 1, date)) }
+const asDate = (value: Date) => value.toISOString().slice(0, 10)
+const nextDay = (day: string) => { const value = utcDate(day); value.setUTCDate(value.getUTCDate() + 1); return asDate(value) }
+const weekStart = (day: string) => { const value = utcDate(day); value.setUTCDate(value.getUTCDate() - value.getUTCDay()); return asDate(value) }
+const addDays = (day: string, amount: number) => { const value = utcDate(day); value.setUTCDate(value.getUTCDate() + amount); return asDate(value) }
 const weekDays = computed(() => Array.from({ length: 7 }, (_, index) => { const iso = addDays(weekStart(date.value), index); const value = new Date(`${iso}T00:00:00`); return { iso, short: new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(value), day: value.getDate() } }))
 const appointmentsForDay = (day: string) => weekAppointments.value.filter(item => item.starts_at.slice(0, 10) === day && item.status !== 'cancelled')
 const isToday = (day: string) => day === new Date().toISOString().slice(0, 10)
@@ -55,10 +60,12 @@ async function load() {
       return
     }
     Object.assign(profileForm.value, profile.value)
-    const [a, calendar, w] = await Promise.all([clinicService.listAppointments({ from: date.value, to: nextDay(date.value) }), clinicService.listAppointments({ from: weekStart(date.value), to: addDays(weekStart(date.value), 7) }), clinicService.listWaitlist()])
-    appointments.value = unpack<{ appointments: ClinicAppointment[] }>(a).appointments || []
-    weekAppointments.value = unpack<{ appointments: ClinicAppointment[] }>(calendar).appointments || []
-    waitlist.value = unpack<{ entries: ClinicWaitlistEntry[] }>(w).entries || []
+    const [dailyResult, calendarResult, waitlistResult] = await Promise.allSettled([clinicService.listAppointments({ from: date.value, to: nextDay(date.value) }), clinicService.listAppointments({ from: weekStart(date.value), to: addDays(weekStart(date.value), 7) }), clinicService.listWaitlist()])
+    if (dailyResult.status === 'rejected') throw dailyResult.reason
+    appointments.value = unpack<{ appointments: ClinicAppointment[] }>(dailyResult.value).appointments || []
+    weekAppointments.value = calendarResult.status === 'fulfilled' ? unpack<{ appointments: ClinicAppointment[] }>(calendarResult.value).appointments || [] : []
+    waitlist.value = waitlistResult.status === 'fulfilled' ? unpack<{ entries: ClinicWaitlistEntry[] }>(waitlistResult.value).entries || [] : []
+    if (calendarResult.status === 'rejected') toast.error('Week calendar could not load. Your clinic setup is still saved.')
     const [practitionerResult, serviceResult, accountResult, contactResult] = await Promise.all([clinicService.listPractitioners(), clinicService.listServices(), accountsService.list(), contactsService.list({ limit: 100 })])
     practitioners.value = unpack<{ practitioners: ClinicPractitioner[] }>(practitionerResult).practitioners || []
     services.value = unpack<{ services: ClinicService[] }>(serviceResult).services || []
