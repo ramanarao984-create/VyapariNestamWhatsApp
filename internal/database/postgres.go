@@ -1,6 +1,7 @@
 package database
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -703,14 +704,10 @@ func SeedSystemRolesForOrg(db *gorm.DB, orgID uuid.UUID) error {
 }
 
 // SeedDefaultWidgets creates default dashboard widgets for all organizations
+// that do not have a dashboard yet. Widgets are owned by an active member of
+// the same organization; this avoids relying on a particular bootstrap-admin
+// email address and preserves tenant isolation.
 func SeedDefaultWidgets(db *gorm.DB) error {
-	// Find the super admin user (admin@admin.com)
-	var superAdmin models.User
-	if err := db.Where("email = ?", "admin@admin.com").First(&superAdmin).Error; err != nil {
-		// No super admin exists yet, skip widget creation
-		return nil
-	}
-
 	// Get all organizations
 	var orgs []models.Organization
 	if err := db.Find(&orgs).Error; err != nil {
@@ -725,7 +722,21 @@ func SeedDefaultWidgets(db *gorm.DB) error {
 			continue
 		}
 
-		if err := SeedDefaultWidgetsForOrg(db, org.ID, superAdmin.ID); err != nil {
+		// A dashboard should belong to a user from this tenant, rather than a
+		// hard-coded global email that may not exist in a real deployment.
+		var dashboardOwner models.User
+		err := db.Where("organization_id = ? AND is_active = ?", org.ID, true).
+			Order("is_super_admin DESC, created_at ASC").
+			First(&dashboardOwner).Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				// A tenant with no active members cannot display a dashboard yet.
+				continue
+			}
+			return fmt.Errorf("failed to find dashboard owner for organization %s: %w", org.ID, err)
+		}
+
+		if err := SeedDefaultWidgetsForOrg(db, org.ID, dashboardOwner.ID); err != nil {
 			return err
 		}
 	}

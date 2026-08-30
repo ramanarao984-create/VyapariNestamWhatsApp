@@ -51,6 +51,49 @@ func TestSeedPermissionsAndRoles_Idempotent(t *testing.T) {
 	assert.Equal(t, int64(expected), count, "idempotent: count should remain the same after two seeds")
 }
 
+func TestSeedDefaultWidgets_UsesAnActiveUserFromEachOrganization(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	cleanAll(t, db)
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Clinic dashboard organization",
+		Slug:      "clinic-dashboard-" + uuid.NewString(),
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+
+	admin := models.User{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Email:          "clinic.admin@example.com",
+		FullName:       "Clinic Admin",
+		PasswordHash:   "test-password-hash",
+		IsActive:       true,
+		IsAvailable:    true,
+		IsSuperAdmin:   true,
+		Settings:       models.JSONB{},
+	}
+	require.NoError(t, db.Create(&admin).Error)
+
+	require.NoError(t, database.SeedDefaultWidgets(db))
+
+	var widgets []models.Widget
+	require.NoError(t, db.Where("organization_id = ?", org.ID).Find(&widgets).Error)
+	require.Len(t, widgets, 6)
+	for _, widget := range widgets {
+		require.NotNil(t, widget.UserID)
+		assert.Equal(t, admin.ID, *widget.UserID)
+	}
+
+	// The operation is a backfill, so starting the app again must not duplicate
+	// the dashboard for this tenant.
+	require.NoError(t, database.SeedDefaultWidgets(db))
+	var count int64
+	require.NoError(t, db.Model(&models.Widget{}).Where("organization_id = ?", org.ID).Count(&count).Error)
+	assert.Equal(t, int64(6), count)
+}
+
 func TestSeedPermissionsAndRoles_PermissionsHaveResourceAndAction(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	cleanAll(t, db)
