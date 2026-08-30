@@ -22,7 +22,7 @@ type ClinicProfile struct {
 	MinimumNoticeMinutes   int        `gorm:"default:60" json:"minimum_notice_minutes"`
 	CancellationCutoffMins int        `gorm:"column:cancellation_cutoff_minutes;default:120" json:"cancellation_cutoff_minutes"`
 	ReminderEnabled        bool       `gorm:"default:false" json:"reminder_enabled"`
-	ReminderLeadMins       int        `gorm:"default:1440" json:"reminder_lead_minutes"`
+	ReminderLeadMins       int        `gorm:"column:reminder_lead_minutes;default:1440" json:"reminder_lead_minutes"`
 	ReminderTemplateID     *uuid.UUID `gorm:"type:uuid;index" json:"reminder_template_id,omitempty"`
 }
 
