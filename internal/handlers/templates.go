@@ -75,7 +75,7 @@ func (a *App) ListTemplates(r *fastglue.Request) error {
 	query := a.DB.Where("organization_id = ?", orgID)
 
 	if accountName != "" {
-		query = query.Where("whats_app_account = ?", accountName)
+		query = query.Where("whatsapp_account = ?", accountName)
 	}
 	if status != "" {
 		query = query.Where("status = ?", status)
@@ -154,7 +154,7 @@ func (a *App) CreateTemplate(r *fastglue.Request) error {
 
 	// Check if template with same name exists for this account
 	var existingTemplate models.Template
-	if err := a.DB.Where("organization_id = ? AND whats_app_account = ? AND name = ?", orgID, req.WhatsAppAccount, templateName).First(&existingTemplate).Error; err == nil {
+	if err := a.DB.Where("organization_id = ? AND whatsapp_account = ? AND name = ?", orgID, req.WhatsAppAccount, templateName).First(&existingTemplate).Error; err == nil {
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Template with this name already exists", nil, "")
 	}
 
@@ -381,6 +381,11 @@ func (a *App) SubmitTemplate(r *fastglue.Request) error {
 	}
 
 	// Validate media header has a handle uploaded
+	if template.HeaderType == "TEXT" && strings.TrimSpace(template.HeaderContent) == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
+			"Template has a text header but no header text. Add header text or choose no header before submitting.", nil, "")
+	}
+
 	if (template.HeaderType == "IMAGE" || template.HeaderType == "VIDEO" || template.HeaderType == "DOCUMENT") && template.HeaderContent == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
 			fmt.Sprintf("Template has %s header but no media file has been uploaded. Please upload a sample %s first.",
@@ -534,7 +539,7 @@ func (a *App) SyncTemplates(r *fastglue.Request) error {
 
 		// Upsert (including soft-deleted templates to restore them)
 		existing := models.Template{}
-		if err := a.DB.Unscoped().Where("organization_id = ? AND whats_app_account = ? AND name = ? AND language = ?",
+		if err := a.DB.Unscoped().Where("organization_id = ? AND whatsapp_account = ? AND name = ? AND language = ?",
 			orgID, account.Name, template.Name, template.Language).First(&existing).Error; err == nil {
 			// Update existing and restore if soft-deleted (explicitly set deleted_at to NULL)
 			template.ID = existing.ID

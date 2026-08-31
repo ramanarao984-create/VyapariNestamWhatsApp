@@ -56,7 +56,7 @@ func (a *App) ListFlows(r *fastglue.Request) error {
 	query := a.DB.Where("organization_id = ?", orgID)
 
 	if accountName != "" {
-		query = query.Where("whats_app_account = ?", accountName)
+		query = query.Where("whatsapp_account = ?", accountName)
 	}
 	if status != "" {
 		query = query.Where("status = ?", status)
