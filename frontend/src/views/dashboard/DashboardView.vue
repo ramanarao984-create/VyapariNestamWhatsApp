@@ -65,7 +65,8 @@ import {
   Zap,
   Shield,
   LineChart,
-  Tags
+  Tags,
+  CalendarDays
 } from 'lucide-vue-next'
 // Centralized Chart.js setup (registered once)
 import { Line, Bar, Pie } from '@/lib/charts'
@@ -750,6 +751,23 @@ onMounted(() => {
     <!-- Content -->
     <ScrollArea class="flex-1">
       <div class="p-6 space-y-6">
+        <!-- Daily operations entry point. Widget configuration remains available
+             below for analytics users; this panel keeps reception work simple. -->
+        <section class="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-5 light:bg-emerald-50/70" aria-label="Daily clinic operations">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div class="max-w-2xl">
+              <p class="text-sm font-semibold text-emerald-300 light:text-emerald-700">{{ $t('nav.dashboard') }}</p>
+              <h2 class="mt-1 text-xl font-semibold text-white light:text-gray-900">{{ $t('dashboard.operationsTitle') }}</h2>
+              <p class="mt-1 text-sm text-white/60 light:text-gray-600">{{ $t('dashboard.operationsDescription') }}</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <RouterLink to="/chat"><Button size="sm" class="bg-emerald-600 text-white hover:bg-emerald-500"><MessageSquare class="mr-1.5 h-4 w-4" />{{ $t('dashboard.openInbox') }}</Button></RouterLink>
+              <RouterLink to="/clinic"><Button size="sm" variant="outline" class="border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.09] light:border-gray-200 light:bg-white light:text-gray-700"><CalendarDays class="mr-1.5 h-4 w-4" />{{ $t('dashboard.openClinicAssistant') }}</Button></RouterLink>
+              <RouterLink to="/contacts"><Button size="sm" variant="outline" class="border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.09] light:border-gray-200 light:bg-white light:text-gray-700"><Contact class="mr-1.5 h-4 w-4" />{{ $t('dashboard.openContacts') }}</Button></RouterLink>
+            </div>
+          </div>
+        </section>
+
         <!-- Loading Skeleton -->
         <div v-if="isLoading" class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <div v-for="i in 4" :key="i" class="rounded-xl border border-white/[0.08] bg-white/[0.02] p-6 light:bg-white light:border-gray-200">

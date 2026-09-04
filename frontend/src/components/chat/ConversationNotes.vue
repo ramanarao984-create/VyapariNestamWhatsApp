@@ -17,6 +17,7 @@ import {
 
 const props = defineProps<{
   contactId: string
+  embedded?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -160,9 +161,17 @@ function formatNoteTime(dateStr: string) {
 </script>
 
 <template>
-  <div id="notes-panel" class="w-80 border-l border-white/[0.08] light:border-gray-200 bg-[#111113] light:bg-white flex flex-col">
+  <div
+    id="notes-panel"
+    :class="[
+      'flex flex-col h-full',
+      embedded
+        ? 'w-full bg-transparent'
+        : 'w-80 border-l border-white/[0.08] light:border-gray-200 bg-[#111113] light:bg-white'
+    ]"
+  >
     <!-- Header -->
-    <div class="px-4 py-3 border-b border-white/[0.08] light:border-gray-200 flex items-center justify-between">
+    <div v-if="!embedded" class="px-4 py-3 border-b border-white/[0.08] light:border-gray-200 flex items-center justify-between">
       <div class="flex items-center gap-2">
         <div class="h-7 w-7 rounded-lg bg-amber-500/15 flex items-center justify-center">
           <StickyNote class="h-4 w-4 text-amber-400 light:text-amber-600" />

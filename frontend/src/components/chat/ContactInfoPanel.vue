@@ -66,6 +66,7 @@ interface SessionData {
 const props = defineProps<{
   contact: Contact
   sessionData?: SessionData | null
+  embedded?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -96,6 +97,7 @@ onMounted(async () => {
 })
 
 function startResize(e: MouseEvent) {
+  if (props.embedded) return
   isResizing.value = true
   const startX = e.clientX
   const startWidth = panelWidth.value
@@ -242,18 +244,22 @@ async function updateContactTags(tags: string[]) {
 
 <template>
   <div
-    class="flex flex-col bg-card h-full relative"
-    :style="{ width: `${panelWidth}px` }"
+    :class="[
+      'flex flex-col h-full relative',
+      embedded ? 'w-full bg-transparent' : 'bg-card'
+    ]"
+    :style="embedded ? undefined : { width: `${panelWidth}px` }"
   >
     <!-- Resize Handle -->
     <div
+      v-if="!embedded"
       class="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/20 active:bg-primary/30 z-10 border-l"
       :class="{ 'bg-primary/30': isResizing }"
       @mousedown="startResize"
     />
 
     <!-- Header -->
-    <div class="h-12 px-3 border-b flex items-center justify-between">
+    <div v-if="!embedded" class="h-12 px-3 border-b flex items-center justify-between">
       <h3 class="font-medium text-sm">Contact Info</h3>
       <Button variant="ghost" size="icon" class="h-8 w-8" @click="emit('close')">
         <X class="h-4 w-4" />
@@ -263,7 +269,7 @@ async function updateContactTags(tags: string[]) {
     <ScrollArea class="flex-1">
       <div class="p-4 space-y-4">
         <!-- Contact Header -->
-        <div class="flex flex-col items-center text-center pb-4 border-b">
+        <div v-if="!embedded" class="flex flex-col items-center text-center pb-4 border-b">
           <Avatar class="h-16 w-16 mb-3">
             <AvatarImage :src="contact.avatar_url" />
             <AvatarFallback :class="'text-lg bg-gradient-to-br text-white ' + getAvatarGradient(contact.name || contact.phone_number)">

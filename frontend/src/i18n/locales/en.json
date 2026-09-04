@@ -238,10 +238,10 @@
     "Widget": "Widget"
   },
   "nav": {
-    "dashboard": "Dashboard",
+    "dashboard": "Mission Control",
     "chat": "Chat",
     "contacts": "Contacts",
-    "clinic": "Clinic",
+    "clinic": "Clinic Assistant",
     "analytics": "Analytics",
     "settings": "Settings",
     "help": "Help",
@@ -273,7 +273,7 @@
     "ivrFlows": "IVR Flows",
     "callTransfers": "Call Transfers",
     "sectionMain": "Main",
-    "sectionMessaging": "Messaging",
+    "sectionMessaging": "Advanced Messaging",
     "sectionCalling": "Calling",
     "sectionAnalytics": "Analytics",
     "skipToMain": "Skip to main content",
@@ -1402,8 +1402,13 @@
     "status": "Status"
   },
   "dashboard": {
-    "title": "Dashboard",
-    "subtitle": "Customizable analytics overview",
+    "title": "Mission Control",
+    "subtitle": "Your daily clinic operations workspace",
+    "operationsTitle": "Start with what needs attention",
+    "operationsDescription": "Open patient conversations, manage today’s schedule, or update patient records without entering advanced setup.",
+    "openInbox": "Open inbox",
+    "openClinicAssistant": "Open Clinic Assistant",
+    "openContacts": "Open contacts",
     "addWidget": "Add Widget",
     "createWidget": "Create Widget",
     "editWidget": "Edit Widget",

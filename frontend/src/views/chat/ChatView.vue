@@ -97,8 +97,7 @@ import CannedResponsePicker from '@/components/chat/CannedResponsePicker.vue'
 import PreviewButtonGroup from '@/components/chatbot/flow-preview/PreviewButtonGroup.vue'
 import TemplatePicker from '@/components/chat/TemplatePicker.vue'
 import MediaViewerDialog from '@/components/chat/MediaViewerDialog.vue'
-import ContactInfoPanel from '@/components/chat/ContactInfoPanel.vue'
-import ConversationNotes from '@/components/chat/ConversationNotes.vue'
+import PatientSummaryDrawer from '@/components/chat/PatientSummaryDrawer.vue'
 import CallButton from '@/components/calling/CallButton.vue'
 import { useNotesStore } from '@/stores/notes'
 import { useHeaderMedia } from '@/composables/useHeaderMedia'
@@ -134,8 +133,8 @@ const newMessagesCount = ref(0)
 const firstUnreadId = ref<string | null>(null)
 const isAtBottom = ref(true)
 const SCROLL_BOTTOM_THRESHOLD = 80
-const isInfoPanelOpen = ref(false)
-const isNotesPanelOpen = ref(false)
+const isPatientSummaryOpen = ref(false)
+const patientSummaryTab = ref<'summary' | 'notes'>('summary')
 const contactSessionData = ref<any>(null)
 
 // Multi-account state
@@ -555,6 +554,10 @@ watch(contactId, async (newId) => {
 })
 
 async function selectContact(id: string) {
+  // A patient drawer belongs to the selected conversation. Reset it before
+  // loading another contact so no prior patient's context is displayed.
+  isPatientSummaryOpen.value = false
+  patientSummaryTab.value = 'summary'
   // Direct deep links to /chat/:id may target a contact that isn't in the
   // currently-loaded (paginated) list — fall back to fetching it directly.
   let contact = contactsStore.contacts.find(c => c.id === id)
@@ -635,9 +638,6 @@ async function selectContact(id: string) {
     ])
     if (sessionResult) {
       contactSessionData.value = sessionResult.data.data || sessionResult.data
-      if (contactSessionData.value?.panel_config?.sections?.length > 0) {
-        isInfoPanelOpen.value = true
-      }
     } else {
       contactSessionData.value = null
     }
@@ -1866,12 +1866,12 @@ async function sendMediaMessage() {
                   size="icon"
                   id="notes-button"
                   class="h-8 w-8 relative text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
-                  :class="isNotesPanelOpen && 'bg-amber-500/10 text-amber-400 light:bg-amber-50 light:text-amber-600'"
-                  @click="isNotesPanelOpen = !isNotesPanelOpen"
+                  :class="isPatientSummaryOpen && patientSummaryTab === 'notes' && 'bg-amber-500/10 text-amber-400 light:bg-amber-50 light:text-amber-600'"
+                  @click="patientSummaryTab = 'notes'; isPatientSummaryOpen = true"
                 >
                   <StickyNote class="h-4 w-4" />
                   <span
-                    v-if="notesStore.notes.length > 0 && !isNotesPanelOpen"
+                    v-if="notesStore.notes.length > 0 && !(isPatientSummaryOpen && patientSummaryTab === 'notes')"
                     id="notes-badge"
                     class="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] rounded-full bg-amber-500 text-[10px] text-white flex items-center justify-center px-1"
                   >
@@ -1888,8 +1888,8 @@ async function sendMediaMessage() {
                   size="icon"
                   id="info-button"
                   class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
-                  :class="isInfoPanelOpen && 'bg-white/[0.08] text-white light:bg-gray-100 light:text-gray-900'"
-                  @click="isInfoPanelOpen = !isInfoPanelOpen"
+                  :class="isPatientSummaryOpen && patientSummaryTab === 'summary' && 'bg-white/[0.08] text-white light:bg-gray-100 light:text-gray-900'"
+                  @click="patientSummaryTab = 'summary'; isPatientSummaryOpen = true"
                 >
                   <Info class="h-4 w-4" />
                 </Button>
@@ -1917,9 +1917,9 @@ async function sendMediaMessage() {
                   <Play class="mr-2 h-4 w-4" />
                   <span>{{ $t('chat.resumeChatbot') }}</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem @click="isInfoPanelOpen = !isInfoPanelOpen">
+                <DropdownMenuItem @click="patientSummaryTab = 'summary'; isPatientSummaryOpen = true">
                   <Info class="mr-2 h-4 w-4" />
-                  <span>{{ isInfoPanelOpen ? $t('chat.hideContactDetails') : $t('chat.viewContactDetails') }}</span>
+                  <span>{{ $t('chat.viewContactDetails') }}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -2471,19 +2471,13 @@ async function sendMediaMessage() {
       </template>
     </div>
 
-    <!-- Notes Side Panel -->
-    <ConversationNotes
-      v-if="contactsStore.currentContact && isNotesPanelOpen"
-      :contact-id="contactsStore.currentContact.id"
-      @close="isNotesPanelOpen = false"
-    />
-
-    <!-- Contact Info Panel -->
-    <ContactInfoPanel
-      v-if="contactsStore.currentContact && isInfoPanelOpen"
+    <!-- Unified patient summary drawer keeps patient details and internal notes together. -->
+    <PatientSummaryDrawer
+      v-if="contactsStore.currentContact && isPatientSummaryOpen"
       :contact="contactsStore.currentContact"
       :session-data="contactSessionData"
-      @close="isInfoPanelOpen = false"
+      :initial-tab="patientSummaryTab"
+      @close="isPatientSummaryOpen = false"
       @tags-updated="(tags) => contactsStore.updateContactTags(contactsStore.currentContact!.id, tags)"
     />
 
