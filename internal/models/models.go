@@ -367,13 +367,40 @@ type Contact struct {
 	ChatbotReminderSent  bool       `gorm:"default:false" json:"chatbot_reminder_sent"`
 
 	// Relations
-	Organization *Organization `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
-	AssignedUser *User         `gorm:"foreignKey:AssignedUserID" json:"assigned_user,omitempty"`
-	Messages     []Message     `gorm:"foreignKey:ContactID" json:"messages,omitempty"`
+	Organization *Organization   `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
+	AssignedUser *User           `gorm:"foreignKey:AssignedUserID" json:"assigned_user,omitempty"`
+	Messages     []Message       `gorm:"foreignKey:ContactID" json:"messages,omitempty"`
+	Profile      *ContactProfile `gorm:"foreignKey:ContactID" json:"profile,omitempty"`
 }
 
 func (Contact) TableName() string {
 	return "contacts"
+}
+
+// ContactProfile contains optional, non-clinical details recorded by a clinic
+// receptionist. It deliberately excludes diagnoses, prescriptions, and other
+// medical records; those require a separate, access-controlled clinical module.
+type ContactProfile struct {
+	BaseModel
+	OrganizationID       uuid.UUID  `gorm:"type:uuid;index;not null" json:"organization_id"`
+	ContactID            uuid.UUID  `gorm:"type:uuid;uniqueIndex;not null" json:"contact_id"`
+	Email                string     `gorm:"size:255" json:"email,omitempty"`
+	DateOfBirth          *time.Time `gorm:"type:date" json:"date_of_birth,omitempty"`
+	Gender               string     `gorm:"size:30" json:"gender,omitempty"`
+	Area                 string     `gorm:"size:255" json:"area,omitempty"`
+	Occupation           string     `gorm:"size:255" json:"occupation,omitempty"`
+	LifecycleStage       string     `gorm:"size:40;not null;default:'new_lead'" json:"lifecycle_stage"`
+	AcquisitionSource    string     `gorm:"size:40;not null;default:'walk_in'" json:"acquisition_source"`
+	PreferredPaymentMode string     `gorm:"size:40" json:"preferred_payment_mode,omitempty"`
+	MarketingConsent     bool       `gorm:"default:false" json:"marketing_consent"`
+	MarketingConsentAt   *time.Time `json:"marketing_consent_at,omitempty"`
+
+	Organization *Organization `gorm:"foreignKey:OrganizationID" json:"-"`
+	Contact      *Contact      `gorm:"foreignKey:ContactID" json:"-"`
+}
+
+func (ContactProfile) TableName() string {
+	return "contact_profiles"
 }
 
 // Message represents a WhatsApp message

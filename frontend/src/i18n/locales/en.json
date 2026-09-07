@@ -488,7 +488,22 @@
     "searchTags": "Search tags...",
     "noTagsFound": "No tags found",
     "whatsappAccount": "WhatsApp Account",
-    "selectAccount": "Select account..."
+    "selectAccount": "Select account...",
+    "additionalDetails": "Patient details",
+    "additionalDetailsHint": "Optional details for reception follow-up and patient communication. Do not enter clinical notes here.",
+    "optional": "Optional",
+    "selectOptional": "Select if known",
+    "email": "Email",
+    "dateOfBirth": "Date of birth",
+    "gender": "Gender",
+    "area": "Area / locality",
+    "areaPlaceholder": "e.g. Kukatpally",
+    "occupation": "Occupation",
+    "occupationPlaceholder": "Optional",
+    "lifecycleStage": "Patient stage",
+    "source": "How they came to us",
+    "preferredPaymentMode": "Preferred payment mode",
+    "marketingConsent": "Patient has agreed to receive clinic updates on WhatsApp."
   },
   "importExport": {
     "title": "Import/Export {resource}",

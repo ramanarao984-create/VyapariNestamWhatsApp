@@ -18,6 +18,63 @@ import (
 
 // --- ListContacts Tests ---
 
+func TestApp_CreateContact_WithOperationalProfile(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"phone_number": "919999000001",
+		"profile_name": "Walk-in patient",
+		"profile": map[string]any{
+			"email": "patient@example.com", "date_of_birth": "1990-01-10",
+			"area": "Kukatpally", "lifecycle_stage": "appointment_booked",
+			"acquisition_source": "walk_in", "preferred_payment_mode": "upi",
+			"marketing_consent": true,
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	require.NoError(t, app.CreateContact(req))
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var response struct {
+		Data handlers.ContactResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &response))
+	require.NotNil(t, response.Data.Profile)
+	assert.Equal(t, "appointment_booked", response.Data.Profile.LifecycleStage)
+	assert.Equal(t, "walk_in", response.Data.Profile.AcquisitionSource)
+	assert.True(t, response.Data.Profile.MarketingConsent)
+	require.NotNil(t, response.Data.Profile.MarketingConsentAt)
+
+	var stored models.ContactProfile
+	require.NoError(t, app.DB.Where("organization_id = ? AND contact_id = ?", org.ID, response.Data.ID).First(&stored).Error)
+	assert.Equal(t, "patient@example.com", stored.Email)
+}
+
+func TestApp_CreateContact_RejectsInvalidOperationalProfile(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"phone_number": "919999000002",
+		"profile":      map[string]any{"lifecycle_stage": "diagnosed"},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	require.NoError(t, app.CreateContact(req))
+	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+	assert.Contains(t, string(testutil.GetResponseBody(req)), "lifecycle_stage is invalid")
+
+	var count int64
+	app.DB.Model(&models.Contact{}).Where("organization_id = ? AND phone_number = ?", org.ID, "919999000002").Count(&count)
+	assert.Zero(t, count, "validation must not create a partial contact")
+}
+
 func TestApp_ListContacts(t *testing.T) {
 	t.Parallel()
 

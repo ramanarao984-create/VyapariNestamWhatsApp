@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { contactsService, accountsService, type Tag } from '@/services/api'
 import { useTagsStore } from '@/stores/tags'
 import { toast } from 'vue-sonner'
@@ -34,19 +35,35 @@ interface ContactFormData {
   profile_name: string
   whatsapp_account: string
   tags: string[]
+  profile: {
+    email: string
+    date_of_birth: string
+    gender: string
+    area: string
+    occupation: string
+    lifecycle_stage: string
+    acquisition_source: string
+    preferred_payment_mode: string
+    marketing_consent: boolean
+  }
 }
 
-const defaultFormData: ContactFormData = { phone_number: '', profile_name: '', whatsapp_account: '', tags: [] }
+const defaultFormData: ContactFormData = {
+  phone_number: '', profile_name: '', whatsapp_account: '', tags: [],
+  profile: { email: '', date_of_birth: '', gender: '', area: '', occupation: '', lifecycle_stage: 'new_lead', acquisition_source: 'walk_in', preferred_payment_mode: '', marketing_consent: false }
+}
 
 const formData = ref<ContactFormData>({ ...defaultFormData })
 const isSubmitting = ref(false)
 const tagSelectorOpen = ref(false)
 const availableTags = ref<Tag[]>([])
 const availableAccounts = ref<{ id: string; name: string; phone_number: string }[]>([])
+const additionalDetailsOpen = ref(false)
 
 watch(() => props.open, (isOpen) => {
   if (isOpen) {
-    formData.value = { ...defaultFormData }
+    formData.value = structuredClone(defaultFormData)
+    additionalDetailsOpen.value = false
     fetchTags()
     fetchAccounts()
   }
@@ -83,7 +100,8 @@ async function saveContact() {
       phone_number: formData.value.phone_number.trim(),
       profile_name: formData.value.profile_name.trim() || undefined,
       whatsapp_account: formData.value.whatsapp_account || undefined,
-      tags: formData.value.tags.length > 0 ? formData.value.tags : undefined
+      tags: formData.value.tags.length > 0 ? formData.value.tags : undefined,
+      profile: formData.value.profile
     })
     const contact = response.data?.data || response.data
     toast.success(t('common.createdSuccess', { resource: t('resources.Contact') }))
@@ -203,6 +221,26 @@ function closeDialog() {
             </TagBadge>
           </div>
         </div>
+        <Collapsible v-model:open="additionalDetailsOpen" class="rounded-xl border border-border/70 bg-muted/20">
+          <CollapsibleTrigger class="flex w-full items-center justify-between px-3 py-3 text-left text-sm font-medium">
+            <span>{{ $t('contacts.additionalDetails') }}</span>
+            <span class="text-xs font-normal text-muted-foreground">{{ $t('contacts.optional') }}</span>
+          </CollapsibleTrigger>
+          <CollapsibleContent class="border-t border-border/70 px-3 pb-3 pt-3 space-y-3">
+            <p class="text-xs text-muted-foreground">{{ $t('contacts.additionalDetailsHint') }}</p>
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div class="space-y-2"><Label>{{ $t('contacts.email') }}</Label><Input v-model="formData.profile.email" type="email" placeholder="name@example.com" /></div>
+              <div class="space-y-2"><Label>{{ $t('contacts.dateOfBirth') }}</Label><Input v-model="formData.profile.date_of_birth" type="date" /></div>
+              <div class="space-y-2"><Label>{{ $t('contacts.gender') }}</Label><Select v-model="formData.profile.gender"><SelectTrigger><SelectValue :placeholder="$t('contacts.selectOptional')" /></SelectTrigger><SelectContent><SelectItem value="female">Female</SelectItem><SelectItem value="male">Male</SelectItem><SelectItem value="other">Other</SelectItem><SelectItem value="prefer_not_to_say">Prefer not to say</SelectItem></SelectContent></Select></div>
+              <div class="space-y-2"><Label>{{ $t('contacts.area') }}</Label><Input v-model="formData.profile.area" :placeholder="$t('contacts.areaPlaceholder')" /></div>
+              <div class="space-y-2"><Label>{{ $t('contacts.lifecycleStage') }}</Label><Select v-model="formData.profile.lifecycle_stage"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="new_lead">New lead</SelectItem><SelectItem value="appointment_booked">Appointment booked</SelectItem><SelectItem value="active_patient">Active patient</SelectItem><SelectItem value="follow_up">Follow-up</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent></Select></div>
+              <div class="space-y-2"><Label>{{ $t('contacts.source') }}</Label><Select v-model="formData.profile.acquisition_source"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="walk_in">Walk-in</SelectItem><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="phone_call">Phone call</SelectItem><SelectItem value="email">Email</SelectItem><SelectItem value="referral">Referral</SelectItem><SelectItem value="other">Other</SelectItem></SelectContent></Select></div>
+              <div class="space-y-2"><Label>{{ $t('contacts.preferredPaymentMode') }}</Label><Select v-model="formData.profile.preferred_payment_mode"><SelectTrigger><SelectValue :placeholder="$t('contacts.selectOptional')" /></SelectTrigger><SelectContent><SelectItem value="upi">UPI</SelectItem><SelectItem value="card">Card</SelectItem><SelectItem value="cash">Cash</SelectItem><SelectItem value="insurance">Insurance</SelectItem><SelectItem value="other">Other</SelectItem></SelectContent></Select></div>
+              <div class="space-y-2"><Label>{{ $t('contacts.occupation') }}</Label><Input v-model="formData.profile.occupation" :placeholder="$t('contacts.occupationPlaceholder')" /></div>
+            </div>
+            <label class="flex items-start gap-2 rounded-lg bg-background/60 px-2 py-2 text-xs text-muted-foreground"><input v-model="formData.profile.marketing_consent" type="checkbox" class="mt-0.5 h-4 w-4" /><span>{{ $t('contacts.marketingConsent') }}</span></label>
+          </CollapsibleContent>
+        </Collapsible>
       </div>
       <div class="flex justify-end gap-2">
         <Button variant="outline" @click="closeDialog">{{ $t('common.cancel') }}</Button>

@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/mail"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -24,24 +26,39 @@ import (
 
 // ContactResponse represents a contact with additional fields for the frontend
 type ContactResponse struct {
-	ID                 uuid.UUID  `json:"id"`
-	PhoneNumber        string     `json:"phone_number"`
-	Name               string     `json:"name"`
-	ProfileName        string     `json:"profile_name"`
-	AvatarURL          string     `json:"avatar_url"`
-	Status             string     `json:"status"`
-	Tags               []string   `json:"tags"`
-	Metadata           any        `json:"metadata"`
-	LastMessageAt      *time.Time `json:"last_message_at"`
-	LastMessagePreview string     `json:"last_message_preview"`
-	UnreadCount        int        `json:"unread_count"`
-	AssignedUserID     *uuid.UUID `json:"assigned_user_id,omitempty"`
-	WhatsAppAccount    string     `json:"whatsapp_account,omitempty"`
-	LastInboundAt      *time.Time `json:"last_inbound_at,omitempty"`
-	ServiceWindowOpen  bool       `json:"service_window_open"`
-	MarketingOptOut    bool       `json:"marketing_opt_out"`
-	CreatedAt          time.Time  `json:"created_at"`
-	UpdatedAt          time.Time  `json:"updated_at"`
+	ID                 uuid.UUID               `json:"id"`
+	PhoneNumber        string                  `json:"phone_number"`
+	Name               string                  `json:"name"`
+	ProfileName        string                  `json:"profile_name"`
+	AvatarURL          string                  `json:"avatar_url"`
+	Status             string                  `json:"status"`
+	Tags               []string                `json:"tags"`
+	Metadata           any                     `json:"metadata"`
+	LastMessageAt      *time.Time              `json:"last_message_at"`
+	LastMessagePreview string                  `json:"last_message_preview"`
+	UnreadCount        int                     `json:"unread_count"`
+	AssignedUserID     *uuid.UUID              `json:"assigned_user_id,omitempty"`
+	WhatsAppAccount    string                  `json:"whatsapp_account,omitempty"`
+	LastInboundAt      *time.Time              `json:"last_inbound_at,omitempty"`
+	ServiceWindowOpen  bool                    `json:"service_window_open"`
+	MarketingOptOut    bool                    `json:"marketing_opt_out"`
+	Profile            *ContactProfileResponse `json:"profile,omitempty"`
+	CreatedAt          time.Time               `json:"created_at"`
+	UpdatedAt          time.Time               `json:"updated_at"`
+}
+
+// ContactProfileResponse intentionally contains only non-clinical CRM fields.
+type ContactProfileResponse struct {
+	Email                string     `json:"email,omitempty"`
+	DateOfBirth          *time.Time `json:"date_of_birth,omitempty"`
+	Gender               string     `json:"gender,omitempty"`
+	Area                 string     `json:"area,omitempty"`
+	Occupation           string     `json:"occupation,omitempty"`
+	LifecycleStage       string     `json:"lifecycle_stage"`
+	AcquisitionSource    string     `json:"acquisition_source"`
+	PreferredPaymentMode string     `json:"preferred_payment_mode,omitempty"`
+	MarketingConsent     bool       `json:"marketing_consent"`
+	MarketingConsentAt   *time.Time `json:"marketing_consent_at,omitempty"`
 }
 
 // MessageResponse represents a message for the frontend
@@ -96,7 +113,7 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	tagsParam := string(r.RequestCtx.QueryArgs().Peek("tags"))
 
 	var contacts []models.Contact
-	query := a.ScopeToOrg(a.DB, userID, orgID)
+	query := a.ScopeToOrg(a.DB, userID, orgID).Preload("Profile", "organization_id = ?", orgID)
 
 	// Users without contacts:read permission can only see contacts assigned to them
 	// or contacts with an active chat transfer to them
@@ -230,7 +247,7 @@ func (a *App) GetContact(r *fastglue.Request) error {
 	}
 
 	var contact models.Contact
-	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
+	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).Preload("Profile", "organization_id = ?", orgID)
 
 	// Users without contacts:read permission can only access their assigned contacts
 	// or contacts with an active chat transfer to them
@@ -1335,11 +1352,128 @@ func (a *App) UpdateContactTags(r *fastglue.Request) error {
 
 // CreateContactRequest represents the request body for creating a contact
 type CreateContactRequest struct {
-	PhoneNumber     string         `json:"phone_number"`
-	ProfileName     string         `json:"profile_name"`
-	WhatsAppAccount string         `json:"whatsapp_account"`
-	Tags            []string       `json:"tags"`
-	Metadata        map[string]any `json:"metadata"`
+	PhoneNumber     string               `json:"phone_number"`
+	ProfileName     string               `json:"profile_name"`
+	WhatsAppAccount string               `json:"whatsapp_account"`
+	Tags            []string             `json:"tags"`
+	Metadata        map[string]any       `json:"metadata"`
+	Profile         *ContactProfileInput `json:"profile,omitempty"`
+}
+
+// ContactProfileInput is intentionally limited to operational and marketing
+// context. Clinical notes and payment transaction details belong in dedicated,
+// role-protected modules and are rejected by omission from this contract.
+type ContactProfileInput struct {
+	Email                string `json:"email"`
+	DateOfBirth          string `json:"date_of_birth"`
+	Gender               string `json:"gender"`
+	Area                 string `json:"area"`
+	Occupation           string `json:"occupation"`
+	LifecycleStage       string `json:"lifecycle_stage"`
+	AcquisitionSource    string `json:"acquisition_source"`
+	PreferredPaymentMode string `json:"preferred_payment_mode"`
+	MarketingConsent     bool   `json:"marketing_consent"`
+}
+
+func validateContactProfileInput(input *ContactProfileInput) (*models.ContactProfile, error) {
+	if input == nil {
+		return nil, nil
+	}
+	profile := &models.ContactProfile{
+		Email:                strings.TrimSpace(input.Email),
+		Gender:               strings.TrimSpace(strings.ToLower(input.Gender)),
+		Area:                 strings.TrimSpace(input.Area),
+		Occupation:           strings.TrimSpace(input.Occupation),
+		LifecycleStage:       strings.TrimSpace(strings.ToLower(input.LifecycleStage)),
+		AcquisitionSource:    strings.TrimSpace(strings.ToLower(input.AcquisitionSource)),
+		PreferredPaymentMode: strings.TrimSpace(strings.ToLower(input.PreferredPaymentMode)),
+		MarketingConsent:     input.MarketingConsent,
+	}
+	if profile.Email != "" {
+		if _, err := mail.ParseAddress(profile.Email); err != nil {
+			return nil, fmt.Errorf("email is invalid")
+		}
+	}
+	for field, value := range map[string]struct {
+		value string
+		max   int
+	}{
+		"email": {profile.Email, 255}, "area": {profile.Area, 255}, "occupation": {profile.Occupation, 255},
+	} {
+		if len(value.value) > value.max {
+			return nil, fmt.Errorf("%s is too long", field)
+		}
+	}
+	if input.DateOfBirth != "" {
+		dob, err := time.Parse(time.DateOnly, input.DateOfBirth)
+		if err != nil || dob.After(time.Now()) {
+			return nil, fmt.Errorf("date_of_birth must be a past date in YYYY-MM-DD format")
+		}
+		profile.DateOfBirth = &dob
+	}
+	if profile.LifecycleStage == "" {
+		profile.LifecycleStage = "new_lead"
+	}
+	if profile.AcquisitionSource == "" {
+		profile.AcquisitionSource = "walk_in"
+	}
+	if !allowedContactProfileValue(profile.LifecycleStage, "new_lead", "appointment_booked", "active_patient", "follow_up", "inactive") {
+		return nil, fmt.Errorf("lifecycle_stage is invalid")
+	}
+	if !allowedContactProfileValue(profile.AcquisitionSource, "whatsapp", "walk_in", "phone_call", "email", "referral", "other") {
+		return nil, fmt.Errorf("acquisition_source is invalid")
+	}
+	if profile.PreferredPaymentMode != "" && !allowedContactProfileValue(profile.PreferredPaymentMode, "upi", "card", "cash", "insurance", "other") {
+		return nil, fmt.Errorf("preferred_payment_mode is invalid")
+	}
+	return profile, nil
+}
+
+func allowedContactProfileValue(value string, allowed ...string) bool {
+	for _, item := range allowed {
+		if value == item {
+			return true
+		}
+	}
+	return false
+}
+
+func saveContactProfile(db *gorm.DB, organizationID, contactID uuid.UUID, profile *models.ContactProfile) error {
+	if profile == nil {
+		return nil
+	}
+	var existing models.ContactProfile
+	err := db.Where("organization_id = ? AND contact_id = ?", organizationID, contactID).First(&existing).Error
+	if err == nil {
+		if profile.MarketingConsent && !existing.MarketingConsent {
+			now := time.Now().UTC()
+			profile.MarketingConsentAt = &now
+		} else if !profile.MarketingConsent {
+			profile.MarketingConsentAt = nil
+		} else {
+			profile.MarketingConsentAt = existing.MarketingConsentAt
+		}
+		return db.Model(&existing).Updates(map[string]any{
+			"email": profile.Email, "date_of_birth": profile.DateOfBirth,
+			"gender": profile.Gender, "area": profile.Area,
+			"occupation": profile.Occupation, "lifecycle_stage": profile.LifecycleStage,
+			"acquisition_source":     profile.AcquisitionSource,
+			"preferred_payment_mode": profile.PreferredPaymentMode,
+			"marketing_consent":      profile.MarketingConsent,
+			"marketing_consent_at":   profile.MarketingConsentAt,
+		}).Error
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	profile.BaseModel.ID = uuid.New()
+	profile.OrganizationID = organizationID
+	profile.ContactID = contactID
+	if profile.MarketingConsent {
+		now := time.Now().UTC()
+		profile.MarketingConsentAt = &now
+	}
+	return db.Create(profile).Error
 }
 
 // CreateContact creates a new contact or restores a soft-deleted one
@@ -1361,6 +1495,10 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 
 	if req.PhoneNumber == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "phone_number is required", nil, "")
+	}
+	contactProfile, err := validateContactProfileInput(req.Profile)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 	}
 
 	// Normalize phone number
@@ -1398,8 +1536,11 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 			if len(updates) > 0 {
 				a.DB.Model(&existingContact).Updates(updates)
 			}
+			if err := saveContactProfile(a.DB, orgID, existingContact.ID, contactProfile); err != nil {
+				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save contact profile", nil, "")
+			}
 			// Reload contact
-			a.DB.First(&existingContact, existingContact.ID)
+			a.DB.Preload("Profile", "organization_id = ?", orgID).First(&existingContact, existingContact.ID)
 			return r.SendEnvelope(a.buildContactResponse(&existingContact, orgID))
 		}
 		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Contact with this phone number already exists", nil, "")
@@ -1426,10 +1567,16 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 		contact.Metadata = models.JSONB(req.Metadata)
 	}
 
-	if err := a.DB.Create(&contact).Error; err != nil {
-		a.Log.Error("Failed to create contact", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create contact", nil, "")
+	if err := a.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&contact).Error; err != nil {
+			return err
+		}
+		return saveContactProfile(tx, orgID, contact.ID, contactProfile)
+	}); err != nil {
+		a.Log.Error("Failed to create contact and profile", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create contact profile", nil, "")
 	}
+	contact.Profile = contactProfile
 
 	a.logAudit(orgID, userID,
 		"contact", contact.ID, models.AuditActionCreated, nil, &contact)
@@ -1441,12 +1588,13 @@ func (a *App) CreateContact(r *fastglue.Request) error {
 // AssignedUserID uses *string so we can distinguish "not sent" (nil) from
 // "sent as null" (pointer to empty string) to allow clearing the field.
 type UpdateContactRequest struct {
-	ProfileName        *string         `json:"profile_name"`
-	WhatsAppAccount    *string         `json:"whatsapp_account"`
-	Tags               []string        `json:"tags"`
-	Metadata           *map[string]any `json:"metadata"`
-	AssignedUserID     *uuid.UUID      `json:"assigned_user_id"`
-	ClearAssignedAgent *bool           `json:"clear_assigned_agent"`
+	ProfileName        *string              `json:"profile_name"`
+	WhatsAppAccount    *string              `json:"whatsapp_account"`
+	Tags               []string             `json:"tags"`
+	Metadata           *map[string]any      `json:"metadata"`
+	AssignedUserID     *uuid.UUID           `json:"assigned_user_id"`
+	ClearAssignedAgent *bool                `json:"clear_assigned_agent"`
+	Profile            *ContactProfileInput `json:"profile,omitempty"`
 }
 
 // UpdateContact updates an existing contact
@@ -1469,6 +1617,10 @@ func (a *App) UpdateContact(r *fastglue.Request) error {
 	var req UpdateContactRequest
 	if err := a.decodeRequest(r, &req); err != nil {
 		return nil
+	}
+	contactProfile, err := validateContactProfileInput(req.Profile)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 	}
 
 	// Get contact
@@ -1507,17 +1659,24 @@ func (a *App) UpdateContact(r *fastglue.Request) error {
 		updates["assigned_user_id"] = req.AssignedUserID
 	}
 
-	if len(updates) == 0 {
+	if len(updates) == 0 && contactProfile == nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "No fields to update", nil, "")
 	}
 
-	if err := a.DB.Model(contact).Updates(updates).Error; err != nil {
-		a.Log.Error("Failed to update contact", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update contact", nil, "")
+	if err := a.DB.Transaction(func(tx *gorm.DB) error {
+		if len(updates) > 0 {
+			if err := tx.Model(contact).Updates(updates).Error; err != nil {
+				return err
+			}
+		}
+		return saveContactProfile(tx, orgID, contact.ID, contactProfile)
+	}); err != nil {
+		a.Log.Error("Failed to update contact and profile", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save contact profile", nil, "")
 	}
 
 	// Reload contact
-	a.DB.First(contact, contactID)
+	a.DB.Preload("Profile", "organization_id = ?", orgID).First(contact, contactID)
 
 	a.logAudit(orgID, userID,
 		"contact", contact.ID, models.AuditActionUpdated, &oldContact, contact)
@@ -1590,7 +1749,7 @@ func (a *App) buildContactResponse(contact *models.Contact, orgID uuid.UUID) Con
 	// 24-hour service window: open if customer messaged within the last 24 hours.
 	serviceWindowOpen := contact.LastInboundAt != nil && time.Since(*contact.LastInboundAt) < 24*time.Hour
 
-	return ContactResponse{
+	response := ContactResponse{
 		ID:                 contact.ID,
 		PhoneNumber:        phoneNumber,
 		Name:               profileName,
@@ -1609,4 +1768,16 @@ func (a *App) buildContactResponse(contact *models.Contact, orgID uuid.UUID) Con
 		CreatedAt:          contact.CreatedAt,
 		UpdatedAt:          contact.UpdatedAt,
 	}
+	if contact.Profile != nil && contact.Profile.OrganizationID == orgID {
+		response.Profile = &ContactProfileResponse{
+			Email: contact.Profile.Email, DateOfBirth: contact.Profile.DateOfBirth,
+			Gender: contact.Profile.Gender, Area: contact.Profile.Area,
+			Occupation: contact.Profile.Occupation, LifecycleStage: contact.Profile.LifecycleStage,
+			AcquisitionSource:    contact.Profile.AcquisitionSource,
+			PreferredPaymentMode: contact.Profile.PreferredPaymentMode,
+			MarketingConsent:     contact.Profile.MarketingConsent,
+			MarketingConsentAt:   contact.Profile.MarketingConsentAt,
+		}
+	}
+	return response
 }

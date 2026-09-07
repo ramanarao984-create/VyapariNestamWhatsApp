@@ -10,17 +10,12 @@ import ConversationNotes from '@/components/chat/ConversationNotes.vue'
 import { getAvatarGradient, getInitials } from '@/lib/utils'
 import type { Contact } from '@/stores/contacts'
 
-interface SessionData {
-  session_id?: string
-  flow_id?: string
-  flow_name?: string
-  session_data: Record<string, any>
-  panel_config: { sections?: unknown[] }
-}
-
 const props = defineProps<{
   contact: Contact
-  sessionData?: SessionData | null
+  // This is a server-configured display schema. The nested panel structure is
+  // intentionally owned by ContactInfoPanel, so the wrapper does not duplicate
+  // a second, drift-prone type definition.
+  sessionData?: any
   initialTab?: 'summary' | 'notes'
 }>()
 
