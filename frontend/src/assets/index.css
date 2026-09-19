@@ -5,36 +5,36 @@
 @layer base {
   /* Dark-first: Linear/Vercel inspired dark mode */
   :root {
-    /* True black background like Linear/Vercel */
-    --background: 0 0% 2.5%;
-    --foreground: 0 0% 98%;
+    /* Calm clinic workspace: deep slate, not hard black. */
+    --background: 222 28% 7%;
+    --foreground: 210 20% 98%;
 
     /* Glass morphism cards - slightly transparent */
-    --card: 0 0% 5%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 7%;
-    --popover-foreground: 0 0% 98%;
+    --card: 222 24% 10%;
+    --card-foreground: 210 20% 98%;
+    --popover: 222 23% 12%;
+    --popover-foreground: 210 20% 98%;
 
     /* Emerald green primary (WhatsApp style) */
-    --primary: 160 84% 39%;
+    --primary: 165 78% 36%;
     --primary-foreground: 0 0% 100%;
 
     /* Subtle secondary/muted for glass effect */
-    --secondary: 0 0% 8%;
-    --secondary-foreground: 0 0% 90%;
-    --muted: 0 0% 10%;
-    --muted-foreground: 0 0% 55%;
-    --accent: 0 0% 10%;
-    --accent-foreground: 0 0% 98%;
+    --secondary: 222 20% 14%;
+    --secondary-foreground: 210 18% 92%;
+    --muted: 222 18% 15%;
+    --muted-foreground: 215 14% 62%;
+    --accent: 164 30% 15%;
+    --accent-foreground: 165 35% 94%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
     /* Subtle borders - key for Linear look */
-    --border: 0 0% 12%;
-    --input: 0 0% 12%;
-    --ring: 160 84% 39%;
-    --radius: 0.75rem;
+    --border: 220 17% 18%;
+    --input: 220 17% 18%;
+    --ring: 165 78% 42%;
+    --radius: 0.875rem;
 
     /* Glass effect utilities */
     --glass-bg: rgba(255, 255, 255, 0.03);
@@ -44,25 +44,25 @@
 
   /* Light mode - clean white like Vercel */
   .light {
-    --background: 0 0% 98%;
-    --foreground: 0 0% 9%;
+    --background: 40 24% 98%;
+    --foreground: 222 30% 14%;
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 9%;
+    --card-foreground: 222 30% 14%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 9%;
-    --primary: 160 84% 39%;
+    --popover-foreground: 222 30% 14%;
+    --primary: 165 78% 34%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 45%;
-    --accent: 0 0% 96%;
-    --accent-foreground: 0 0% 9%;
+    --secondary: 40 20% 95%;
+    --secondary-foreground: 222 30% 14%;
+    --muted: 40 18% 95%;
+    --muted-foreground: 216 12% 42%;
+    --accent: 160 32% 94%;
+    --accent-foreground: 165 62% 24%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 90%;
-    --input: 0 0% 90%;
-    --ring: 160 84% 39%;
+    --border: 220 16% 88%;
+    --input: 220 16% 88%;
+    --ring: 165 78% 38%;
 
     /* Glass effect utilities for light mode */
     --glass-bg: rgba(0, 0, 0, 0.02);
@@ -107,16 +107,18 @@
     font-size: 14px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    color-scheme: dark;
   }
+  html.light { color-scheme: light; }
   body {
     @apply bg-background text-foreground font-sans;
     line-height: 1.5;
     font-weight: 400;
     /* Subtle gradient for depth like Linear/Vercel */
-    background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(16, 185, 129, 0.08), transparent);
+    background-image: radial-gradient(ellipse 75% 44% at 50% -18%, rgba(20, 184, 166, 0.13), transparent);
   }
   .light body {
-    background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(16, 185, 129, 0.05), transparent);
+    background-image: radial-gradient(ellipse 75% 44% at 50% -18%, rgba(13, 148, 136, 0.08), transparent);
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-medium;
@@ -181,6 +183,74 @@
 .glass-hover:hover {
   background: var(--glass-bg-hover);
 }
+
+/* Shared premium workspace surfaces. Use these on shell-level layout pieces
+   so pages gain depth without each view inventing its own visual language. */
+.premium-app-shell {
+  background:
+    radial-gradient(900px 460px at 100% -10%, rgba(20, 184, 166, 0.09), transparent 62%),
+    radial-gradient(680px 420px at 20% 110%, rgba(56, 189, 248, 0.05), transparent 68%),
+    hsl(var(--background));
+}
+
+.premium-sidebar {
+  background: linear-gradient(180deg, hsl(222 28% 9% / 0.98), hsl(222 30% 7% / 0.98));
+  box-shadow: 12px 0 36px -28px rgba(0, 0, 0, 0.9);
+}
+
+.premium-page-header {
+  background: linear-gradient(180deg, hsl(222 25% 11% / 0.96), hsl(222 24% 9% / 0.88));
+  box-shadow: 0 12px 30px -28px rgba(0, 0, 0, 0.9);
+}
+
+.light .premium-app-shell { background: radial-gradient(900px 460px at 100% -10%, rgba(13, 148, 136, 0.08), transparent 62%), hsl(var(--background)); }
+.light .premium-sidebar { background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(249,250,249,.98)); box-shadow: 12px 0 36px -30px rgba(15, 23, 42, .25); }
+.light .premium-page-header { background: rgba(255,255,255,.9); box-shadow: 0 12px 30px -28px rgba(15, 23, 42, .28); }
+
+/* Reception-friendly visual primitives. These keep dense operational screens
+   calm and scannable without changing the underlying workflows. */
+.premium-page {
+  background:
+    radial-gradient(720px 380px at 100% 0%, rgba(20, 184, 166, 0.07), transparent 64%),
+    hsl(var(--background));
+}
+
+.premium-toolbar {
+  background: hsl(222 25% 10% / 0.88);
+  border-color: hsl(var(--border) / 0.78);
+  box-shadow: 0 14px 34px -30px rgba(0, 0, 0, 0.92);
+}
+
+.premium-inset {
+  background: hsl(222 23% 9% / 0.72);
+  border-color: hsl(var(--border) / 0.8);
+}
+
+.premium-stat {
+  background: linear-gradient(145deg, hsl(222 24% 13% / 0.9), hsl(222 25% 9% / 0.84));
+  box-shadow: 0 16px 36px -30px rgba(0, 0, 0, 0.9);
+}
+
+.premium-list-item {
+  border-left: 2px solid transparent;
+}
+
+.premium-list-item:hover {
+  background: hsl(var(--primary) / 0.075);
+  border-left-color: hsl(var(--primary) / 0.42);
+}
+
+.premium-list-item--active {
+  background: linear-gradient(90deg, hsl(var(--primary) / 0.16), hsl(var(--primary) / 0.035));
+  border-left-color: hsl(var(--primary));
+}
+
+.light .premium-page { background: radial-gradient(720px 380px at 100% 0%, rgba(13, 148, 136, 0.07), transparent 64%), hsl(var(--background)); }
+.light .premium-toolbar { background: rgba(255,255,255,.88); border-color: hsl(var(--border)); box-shadow: 0 14px 34px -30px rgba(15, 23, 42, .24); }
+.light .premium-inset { background: rgba(248,250,249,.8); border-color: hsl(var(--border)); }
+.light .premium-stat { background: linear-gradient(145deg, #fff, #f8faf9); box-shadow: 0 16px 36px -30px rgba(15, 23, 42, .24); }
+.light .premium-list-item:hover { background: hsl(var(--primary) / 0.06); }
+.light .premium-list-item--active { background: linear-gradient(90deg, hsl(var(--primary) / 0.14), hsl(var(--primary) / 0.04)); }
 
 /* Static card with depth - use for non-clickable stat cards */
 .card-depth {
@@ -735,3 +805,5 @@
 .avatar-status-pulse::after {
   animation: badge-pulse 2s ease-in-out infinite;
 }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; } }

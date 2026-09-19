@@ -129,6 +129,56 @@ func createTestTeamWithAgent(t *testing.T, app *handlers.App, orgID, userID uuid
 
 // --- GetDashboardStats Tests ---
 
+func TestApp_GetClinicMissionKPIs_TenantScoped(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	otherOrg := testutil.CreateTestOrganization(t, app.DB)
+
+	first := testutil.CreateTestContact(t, app.DB, org.ID)
+	second := testutil.CreateTestContact(t, app.DB, org.ID)
+	other := testutil.CreateTestContact(t, app.DB, otherOrg.ID)
+	for _, profile := range []*models.ContactProfile{
+		{BaseModel: models.BaseModel{ID: uuid.New()}, OrganizationID: org.ID, ContactID: first.ID, AcquisitionSource: "whatsapp", LifecycleStage: "follow_up", PreferredLanguage: "tenglish", PreferredContactMethod: "whatsapp"},
+		{BaseModel: models.BaseModel{ID: uuid.New()}, OrganizationID: org.ID, ContactID: second.ID, AcquisitionSource: "walk_in", LifecycleStage: "active_patient"},
+		{BaseModel: models.BaseModel{ID: uuid.New()}, OrganizationID: otherOrg.ID, ContactID: other.ID, AcquisitionSource: "whatsapp", LifecycleStage: "follow_up", PreferredLanguage: "english", PreferredContactMethod: "phone_call"},
+	} {
+		require.NoError(t, app.DB.Create(profile).Error)
+	}
+
+	today := time.Now().UTC().Format(time.DateOnly)
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetQueryParam(req, "from", today)
+	testutil.SetQueryParam(req, "to", today)
+
+	require.NoError(t, app.GetClinicMissionKPIs(req))
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+	var response struct {
+		Data struct {
+			KPIs handlers.ClinicMissionKPIs `json:"kpis"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &response))
+	assert.Equal(t, int64(2), response.Data.KPIs.NewPatients)
+	assert.Equal(t, int64(1), response.Data.KPIs.WhatsAppEnquiries)
+	assert.Equal(t, int64(1), response.Data.KPIs.WalkIns)
+	assert.Equal(t, int64(1), response.Data.KPIs.FollowUps)
+	assert.Equal(t, int64(1), response.Data.KPIs.PreferencesRecorded)
+}
+
+func TestApp_GetClinicMissionKPIs_RequiresAnalyticsPermission(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	require.NoError(t, app.GetClinicMissionKPIs(req))
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+}
+
 func TestApp_GetDashboardStats_Success(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)

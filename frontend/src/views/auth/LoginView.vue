@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'vue-sonner'
-import { Loader2 } from 'lucide-vue-next'
+import { getErrorMessage } from '@/lib/api-utils'
+import { Loader2, Eye, EyeOff } from 'lucide-vue-next'
 
 const { t } = useI18n()
 
@@ -24,6 +25,8 @@ const authStore = useAuthStore()
 
 const email = ref('')
 const password = ref('')
+const showPassword = ref(false)
+const loginError = ref('')
 const isLoading = ref(false)
 const ssoProviders = ref<SSOProvider[]>([])
 
@@ -49,7 +52,7 @@ onMounted(async () => {
   // Check for SSO error in query params
   const ssoError = route.query.sso_error as string
   if (ssoError) {
-    toast.error(decodeURIComponent(ssoError))
+    toast.error(ssoError)
     // Clear the error from URL
     router.replace({ query: { ...route.query, sso_error: undefined } })
   }
@@ -64,6 +67,8 @@ onMounted(async () => {
 })
 
 const handleLogin = async () => {
+  if (isLoading.value) return
+  loginError.value = ''
   if (!email.value || !password.value) {
     toast.error(t('auth.enterEmailPassword'))
     return
@@ -72,14 +77,13 @@ const handleLogin = async () => {
   isLoading.value = true
 
   try {
-    await authStore.login(email.value, password.value)
+    await authStore.login(email.value.trim(), password.value)
     toast.success(t('auth.loginSuccess'))
 
     const redirect = route.query.redirect as string
     router.push(redirect || '/')
   } catch (error: any) {
-    const message = error.response?.data?.message || t('auth.invalidCredentials')
-    toast.error(message)
+    loginError.value = getErrorMessage(error, t('auth.invalidCredentials'))
   } finally {
     isLoading.value = false
   }
@@ -92,8 +96,8 @@ const initiateSSO = (provider: string) => {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-[#0a0a0b] light:bg-[#f7f9f7] p-4">
-    <div class="w-full max-w-md rounded-2xl border border-white/[0.08] bg-white/[0.02] backdrop-blur light:bg-white light:border-gray-200 light:shadow-xl">
+  <div class="premium-page min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md rounded-3xl border border-white/[0.09] bg-white/[0.035] shadow-[0_30px_80px_-42px_rgba(0,0,0,.95)] backdrop-blur-xl light:bg-white light:border-slate-200 light:shadow-[0_30px_80px_-42px_rgba(15,23,42,.35)]">
       <div class="p-8 space-y-1 text-center">
         <div class="flex justify-center mb-3">
           <img
@@ -102,7 +106,8 @@ const initiateSSO = (provider: string) => {
             alt="Vyapari Nestam - Your business friend. Your growth partner."
           />
         </div>
-        <h2 class="text-xl font-bold text-white light:text-gray-900">{{ $t('auth.welcomeTitle') }}</h2>
+        <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-gradient-to-r from-emerald-400 to-teal-500" />
+        <h2 class="text-2xl font-semibold tracking-tight text-white light:text-slate-900">{{ $t('auth.welcomeTitle') }}</h2>
         <p class="text-white/50 light:text-gray-500">
           {{ $t('auth.welcomeSubtitle') }}
         </p>
@@ -123,15 +128,17 @@ const initiateSSO = (provider: string) => {
           </div>
           <div class="space-y-2">
             <Label for="password" class="text-white/70 light:text-gray-700">{{ $t('auth.password') }}</Label>
-            <Input
+            <div class="relative"><Input
               id="password"
               v-model="password"
-              type="password"
+              :type="showPassword ? 'text' : 'password'"
+              class="pr-11"
               :placeholder="$t('auth.passwordPlaceholder')"
               :disabled="isLoading"
               autocomplete="current-password"
-            />
+            /><Button type="button" variant="ghost" size="icon" class="absolute right-1 top-1 h-8 w-8" :aria-label="showPassword ? $t('auth.hidePassword') : $t('auth.showPassword')" :aria-pressed="showPassword" @click="showPassword = !showPassword"><EyeOff v-if="showPassword" class="h-4 w-4" /><Eye v-else class="h-4 w-4" /></Button></div>
           </div>
+          <p v-if="loginError" role="alert" class="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{{ loginError }}</p>
           <Button type="submit" class="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white shadow-lg shadow-emerald-500/20" :disabled="isLoading">
             <Loader2 v-if="isLoading" class="mr-2 h-4 w-4 animate-spin" />
             {{ $t('auth.signIn') }}

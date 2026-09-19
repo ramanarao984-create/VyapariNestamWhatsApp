@@ -34,7 +34,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { widgetsService, type DashboardWidget, type WidgetData, type LayoutItem } from '@/services/api'
+import { widgetsService, missionControlService, type ClinicMissionKPIs, type DashboardWidget, type WidgetData, type LayoutItem } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import {
   MessageSquare,
@@ -66,11 +66,12 @@ import {
   Shield,
   LineChart,
   Tags,
-  CalendarDays
+  CalendarDays,
+  RefreshCw
 } from 'lucide-vue-next'
 // Centralized Chart.js setup (registered once)
 import { Line, Bar, Pie } from '@/lib/charts'
-import { DateRangePicker } from '@/components/shared'
+import { ErrorState, DateRangePicker } from '@/components/shared'
 import { useDateRange } from '@/composables/useDateRange'
 import { useAppToast } from '@/composables/useAppToast'
 
@@ -86,6 +87,14 @@ const canDeleteWidget = computed(() => authStore.hasPermission('analytics', 'del
 // Widgets state
 const widgets = ref<DashboardWidget[]>([])
 const widgetData = ref<Record<string, WidgetData>>({})
+const clinicKpis = ref<ClinicMissionKPIs | null>(null)
+const clinicKpisLoading = ref(false)
+const widgetsFailed = ref(false)
+const widgetDataFailed = ref(false)
+const clinicKpisFailed = ref(false)
+let widgetDataRequest = 0
+let clinicKpisRequest = 0
+const todayLabel = new Intl.DateTimeFormat(undefined, { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())
 
 const isLoading = ref(true)
 const isWidgetDataLoading = ref(false)
@@ -479,10 +488,12 @@ const availableFields = computed(() => {
 
 // Fetch data
 const fetchWidgets = async () => {
+  widgetsFailed.value = false
   try {
     const response = await widgetsService.list()
     widgets.value = (response.data as any).data?.widgets || []
   } catch (error) {
+    widgetsFailed.value = true
     console.error('Failed to load widgets:', error)
     widgets.value = []
   }
@@ -491,16 +502,18 @@ const fetchWidgets = async () => {
 const fetchWidgetData = async () => {
   if (widgets.value.length === 0) return
 
+  const request = ++widgetDataRequest
+  widgetDataFailed.value = false
   isWidgetDataLoading.value = true
   try {
     const { from, to } = dateRange.value
     const response = await widgetsService.getAllData({ from, to })
-    widgetData.value = (response.data as any).data?.data || {}
+    if (request === widgetDataRequest) widgetData.value = (response.data as any).data?.data || {}
   } catch (error) {
+    if (request === widgetDataRequest) { widgetDataFailed.value = true; widgetData.value = {} }
     console.error('Failed to load widget data:', error)
-    widgetData.value = {}
   } finally {
-    isWidgetDataLoading.value = false
+    if (request === widgetDataRequest) isWidgetDataLoading.value = false
   }
 }
 
@@ -517,12 +530,31 @@ const fetchDataSources = async () => {
   }
 }
 
+const fetchClinicKPIs = async () => {
+  const request = ++clinicKpisRequest
+  clinicKpisFailed.value = false
+  clinicKpisLoading.value = true
+  try {
+    const { from, to } = dateRange.value
+    const response = await missionControlService.getClinicKPIs({ from, to })
+    const payload = (response.data as any).data || response.data
+    if (request === clinicKpisRequest) clinicKpis.value = payload.kpis || null
+  } catch (error) {
+    // Mission Control remains useful if clinic CRM has not been configured yet.
+    console.warn('Failed to load clinic Mission Control KPIs:', error)
+    if (request === clinicKpisRequest) { clinicKpis.value = null; clinicKpisFailed.value = true }
+  } finally {
+    if (request === clinicKpisRequest) clinicKpisLoading.value = false
+  }
+}
+
 const fetchDashboardData = async () => {
   isLoading.value = true
   try {
     await Promise.all([
       fetchWidgets(),
-      fetchDataSources()
+      canCreateWidget.value ? fetchDataSources() : Promise.resolve(),
+      fetchClinicKPIs()
     ])
     await fetchWidgetData()
   } finally {
@@ -533,6 +565,7 @@ const fetchDashboardData = async () => {
 const applyCustomRange = () => {
   applyCustomRangeBase()
   fetchWidgetData()
+  fetchClinicKPIs()
 }
 
 // Widget CRUD
@@ -677,6 +710,7 @@ const confirmDeleteWidget = async () => {
 watch(selectedRange, (newValue) => {
   if (newValue !== 'custom') {
     fetchWidgetData()
+    fetchClinicKPIs()
   }
 })
 
@@ -703,20 +737,20 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-[#0a0a0b] light:bg-gray-50">
+  <div class="premium-page dashboard-workspace flex flex-col h-full min-w-0">
     <!-- Header -->
-    <header class="border-b border-white/[0.08] light:border-gray-200 bg-[#0a0a0b]/95 light:bg-white/95 backdrop-blur">
-      <div class="flex h-16 items-center px-6">
+    <header class="premium-page-header border-b border-border">
+      <div class="flex min-h-20 flex-wrap items-center gap-y-3 px-5 py-4 md:px-8">
         <div class="h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center mr-3 shadow-lg shadow-emerald-500/20">
           <LayoutDashboard class="h-4 w-4 text-white" />
         </div>
-        <div class="flex-1">
+        <div class="flex-1 min-w-[180px]">
           <h1 class="text-xl font-semibold text-white light:text-gray-900">{{ $t('dashboard.title') }}</h1>
           <p class="text-sm text-white/50 light:text-gray-500">{{ $t('dashboard.subtitle') }}</p>
         </div>
 
         <!-- Time Range Filter -->
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <Button v-if="canCreateWidget" variant="outline" size="sm" @click="openAddWidgetDialog" class="bg-white/[0.04] border-white/[0.1] text-white/70 hover:bg-white/[0.08] hover:text-white light:bg-white light:border-gray-200 light:text-gray-700">
             <Plus class="h-4 w-4 mr-2" />
             {{ $t('dashboard.addWidget') }}
@@ -750,22 +784,48 @@ onMounted(() => {
 
     <!-- Content -->
     <ScrollArea class="flex-1">
-      <div class="p-6 space-y-6">
+      <div class="mx-auto w-full max-w-[1600px] p-4 space-y-7 md:p-8">
         <!-- Daily operations entry point. Widget configuration remains available
              below for analytics users; this panel keeps reception work simple. -->
-        <section class="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-5 light:bg-emerald-50/70" aria-label="Daily clinic operations">
+        <section class="operations-hero rounded-2xl border border-primary/20 p-6 md:p-8" aria-label="Daily clinic operations">
           <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div class="max-w-2xl">
-              <p class="text-sm font-semibold text-emerald-300 light:text-emerald-700">{{ $t('nav.dashboard') }}</p>
-              <h2 class="mt-1 text-xl font-semibold text-white light:text-gray-900">{{ $t('dashboard.operationsTitle') }}</h2>
-              <p class="mt-1 text-sm text-white/60 light:text-gray-600">{{ $t('dashboard.operationsDescription') }}</p>
+              <p class="text-sm font-semibold text-emerald-300 light:text-emerald-700">{{ todayLabel }}</p>
+              <h2 class="mt-2 text-2xl md:text-3xl font-semibold tracking-tight text-foreground">{{ $t('dashboard.operationsTitle') }}</h2>
+              <p class="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">{{ $t('dashboard.operationsDescription') }}</p>
             </div>
             <div class="flex flex-wrap gap-2">
-              <RouterLink to="/chat"><Button size="sm" class="bg-emerald-600 text-white hover:bg-emerald-500"><MessageSquare class="mr-1.5 h-4 w-4" />{{ $t('dashboard.openInbox') }}</Button></RouterLink>
-              <RouterLink to="/clinic"><Button size="sm" variant="outline" class="border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.09] light:border-gray-200 light:bg-white light:text-gray-700"><CalendarDays class="mr-1.5 h-4 w-4" />{{ $t('dashboard.openClinicAssistant') }}</Button></RouterLink>
-              <RouterLink to="/contacts"><Button size="sm" variant="outline" class="border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.09] light:border-gray-200 light:bg-white light:text-gray-700"><Contact class="mr-1.5 h-4 w-4" />{{ $t('dashboard.openContacts') }}</Button></RouterLink>
+              <RouterLink v-if="authStore.hasPermission('chat', 'read')" to="/chat"><Button size="sm" class="bg-emerald-600 text-white hover:bg-emerald-500"><MessageSquare class="mr-1.5 h-4 w-4" />{{ $t('dashboard.openInbox') }}</Button></RouterLink>
+              <RouterLink v-if="authStore.hasPermission('clinic', 'read')" to="/clinic"><Button size="sm" variant="outline" class="border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.09] light:border-gray-200 light:bg-white light:text-gray-700"><CalendarDays class="mr-1.5 h-4 w-4" />{{ $t('dashboard.openClinicAssistant') }}</Button></RouterLink>
+              <RouterLink v-if="authStore.hasPermission('contacts', 'read')" to="/contacts"><Button size="sm" variant="outline" class="border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.09] light:border-gray-200 light:bg-white light:text-gray-700"><Contact class="mr-1.5 h-4 w-4" />{{ $t('dashboard.openContacts') }}</Button></RouterLink>
             </div>
           </div>
+        </section>
+
+        <div v-if="clinicKpisFailed" role="alert" class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
+          <span>{{ $t('dashboard.patientDataUnavailable') }}</span>
+          <Button variant="outline" size="sm" @click="fetchClinicKPIs"><RefreshCw class="mr-2 h-4 w-4" />{{ $t('common.retry') }}</Button>
+        </div>
+        <section v-if="clinicKpis || clinicKpisLoading" aria-label="Patient pipeline KPIs">
+          <div class="mb-3 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <p class="text-sm font-semibold text-white light:text-gray-900">{{ $t('dashboard.patientPipeline') }}</p>
+              <p class="mt-0.5 text-sm text-white/50 light:text-gray-500">{{ $t('dashboard.patientPipelineHint') }}</p>
+            </div>
+            <RouterLink v-if="authStore.hasPermission('contacts', 'read')" to="/contacts" class="text-sm font-medium text-emerald-300 hover:text-emerald-200 light:text-emerald-700">{{ $t('dashboard.openPatientRecords') }}</RouterLink>
+          </div>
+          <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div v-for="item in [
+              { label: $t('dashboard.newPatients'), value: clinicKpis?.new_patients, hint: $t('dashboard.forSelectedPeriod'), icon: Users, tone: 'from-sky-500/30 to-blue-500/5 text-sky-300' },
+              { label: $t('dashboard.whatsAppEnquiries'), value: clinicKpis?.whatsapp_enquiries, hint: $t('dashboard.forSelectedPeriod'), icon: MessageSquare, tone: 'from-violet-500/30 to-purple-500/5 text-violet-300' },
+              { label: $t('dashboard.walkIns'), value: clinicKpis?.walk_ins, hint: $t('dashboard.forSelectedPeriod'), icon: Contact, tone: 'from-amber-500/30 to-orange-500/5 text-amber-300' },
+              { label: $t('dashboard.followUpQueue'), value: clinicKpis?.follow_ups, hint: $t('dashboard.currentPatientStage'), icon: Clock, tone: 'from-rose-500/30 to-pink-500/5 text-rose-300' }
+            ]" :key="item.label" class="premium-stat relative overflow-hidden rounded-2xl border border-border p-5">
+              <div :class="['absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r', item.tone.split(' ')[0], item.tone.split(' ')[1]]" />
+              <div class="flex items-start justify-between gap-3"><div><p class="text-sm font-medium text-white/70 light:text-gray-700">{{ item.label }}</p><p class="mt-3 text-4xl font-semibold tracking-tight tabular-nums text-foreground">{{ clinicKpisLoading ? '—' : item.value ?? 0 }}</p><p class="mt-1 text-xs text-white/45 light:text-gray-500">{{ item.hint }}</p></div><component :is="item.icon" :class="['h-5 w-5', item.tone.split(' ').slice(-1)[0]]" /></div>
+            </div>
+          </div>
+          <p v-if="clinicKpis && clinicKpis.preferences_recorded > 0" class="mt-3 text-xs text-white/45 light:text-gray-500">{{ $t('dashboard.preferencesRecorded', { count: clinicKpis.preferences_recorded }) }}</p>
         </section>
 
         <!-- Loading Skeleton -->
@@ -782,9 +842,14 @@ onMounted(() => {
           </div>
         </div>
 
+        <ErrorState v-if="widgetsFailed && !isLoading" :title="$t('dashboard.widgetsUnavailable')" :description="$t('dashboard.retryDataHint')" @retry="fetchDashboardData" />
+        <div v-if="widgetDataFailed" role="alert" class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
+          <span>{{ $t('dashboard.widgetDataUnavailable') }}</span>
+          <Button variant="outline" size="sm" @click="fetchWidgetData">{{ $t('common.retry') }}</Button>
+        </div>
         <!-- Widget Grid Layout -->
         <GridLayout
-          v-if="!isLoading && gridLayout.length > 0"
+          v-if="!isLoading && !widgetDataFailed && gridLayout.length > 0"
           :layout="gridLayout"
           :col-num="GRID_COLS"
           :row-height="GRID_ROW_HEIGHT"
@@ -864,7 +929,7 @@ onMounted(() => {
                   </template>
                   <template v-else>
                     <Transition name="counter-fade" mode="out-in">
-                      <span :key="widgetData[item.i]?.value">{{ formatNumber(widgetData[item.i]?.value || 0) }}</span>
+                      <span :key="widgetData[item.i]?.value">{{ widgetData[item.i] ? formatNumber(widgetData[item.i].value) : '—' }}</span>
                     </Transition>
                   </template>
                 </div>
@@ -1435,5 +1500,14 @@ onMounted(() => {
 .counter-fade-leave-to {
   opacity: 0;
   transform: translateY(-4px);
+}
+</style>
+
+<style scoped>
+.operations-hero { background: radial-gradient(ellipse at 95% 20%, hsl(var(--primary) / .13), transparent 55%), linear-gradient(120deg, hsl(var(--primary) / .06), hsl(var(--card))); }
+.dashboard-workspace :deep(.card-depth) { border-radius: 1rem; box-shadow: 0 4px 20px -12px rgb(15 23 42 / .18); }
+@media (max-width: 700px) {
+  .dashboard-workspace :deep(.vgl-layout) { display: flex; flex-direction: column; gap: 1rem; height: auto !important; }
+  .dashboard-workspace :deep(.vgl-item) { position: relative !important; transform: none !important; inset: auto !important; width: 100% !important; min-height: 180px; }
 }
 </style>

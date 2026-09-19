@@ -6,6 +6,7 @@ import (
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	"gorm.io/gorm"
 )
 
 // DashboardStats represents dashboard statistics
@@ -18,6 +19,16 @@ type DashboardStats struct {
 	ChatbotChange   float64 `json:"chatbot_change"`
 	CampaignsSent   int64   `json:"campaigns_sent"`
 	CampaignsChange float64 `json:"campaigns_change"`
+}
+
+// ClinicMissionKPIs gives the reception team a small, actionable view of the
+// patient pipeline. It deliberately aggregates non-clinical CRM data only.
+type ClinicMissionKPIs struct {
+	NewPatients         int64 `json:"new_patients"`
+	WhatsAppEnquiries   int64 `json:"whatsapp_enquiries"`
+	WalkIns             int64 `json:"walk_ins"`
+	FollowUps           int64 `json:"follow_ups"`
+	PreferencesRecorded int64 `json:"preferences_recorded"`
 }
 
 // RecentMessageResponse represents a recent message in the dashboard
@@ -158,6 +169,60 @@ func (a *App) GetDashboardStats(r *fastglue.Request) error {
 		"stats":           stats,
 		"recent_messages": recentMessages,
 	})
+}
+
+// GetClinicMissionKPIs returns tenant-isolated reception KPIs. Period-based
+// cards use the selected Mission Control range; the follow-up queue is a
+// current-state count so an overdue patient is never hidden by a date filter.
+func (a *App) GetClinicMissionKPIs(r *fastglue.Request) error {
+	orgID, _, err := a.requireAuth(r, models.ResourceAnalytics, models.ActionRead)
+	if err != nil {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	periodEnd := now
+	fromStr := string(r.RequestCtx.QueryArgs().Peek("from"))
+	toStr := string(r.RequestCtx.QueryArgs().Peek("to"))
+	if fromStr != "" || toStr != "" {
+		if fromStr == "" || toStr == "" {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "both from and to dates are required", nil, "")
+		}
+		var errMsg string
+		periodStart, periodEnd, errMsg = parseDateRange(fromStr, toStr)
+		if errMsg != "" {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, errMsg, nil, "")
+		}
+	}
+
+	activeProfiles := a.DB.Model(&models.ContactProfile{}).
+		Joins("JOIN contacts ON contacts.id = contact_profiles.contact_id AND contacts.organization_id = contact_profiles.organization_id AND contacts.deleted_at IS NULL").
+		Where("contact_profiles.organization_id = ? AND contact_profiles.deleted_at IS NULL", orgID)
+	periodProfiles := activeProfiles.Session(&gorm.Session{}).
+		Where("contacts.created_at >= ? AND contacts.created_at <= ?", periodStart, periodEnd)
+
+	stats := ClinicMissionKPIs{}
+	if err := a.DB.Model(&models.Contact{}).
+		Where("organization_id = ? AND created_at >= ? AND created_at <= ?", orgID, periodStart, periodEnd).
+		Count(&stats.NewPatients).Error; err != nil {
+		a.Log.Error("Failed to count new patients", "error", err, "org_id", orgID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load Mission Control KPIs", nil, "")
+	}
+	if err := periodProfiles.Where("contact_profiles.acquisition_source = ?", "whatsapp").Count(&stats.WhatsAppEnquiries).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load Mission Control KPIs", nil, "")
+	}
+	if err := periodProfiles.Where("contact_profiles.acquisition_source = ?", "walk_in").Count(&stats.WalkIns).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load Mission Control KPIs", nil, "")
+	}
+	if err := activeProfiles.Where("contact_profiles.lifecycle_stage = ?", "follow_up").Count(&stats.FollowUps).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load Mission Control KPIs", nil, "")
+	}
+	if err := activeProfiles.Where("contact_profiles.preferred_language <> '' AND contact_profiles.preferred_contact_method <> ''").Count(&stats.PreferencesRecorded).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load Mission Control KPIs", nil, "")
+	}
+
+	return r.SendEnvelope(map[string]any{"kpis": stats})
 }
 
 // calculatePercentageChange calculates the percentage change between two values

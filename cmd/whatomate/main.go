@@ -884,6 +884,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 
 	// Analytics
 	g.GET("/api/analytics/dashboard", app.GetDashboardStats)
+	g.GET("/api/analytics/clinic-kpis", app.GetClinicMissionKPIs)
 	g.GET("/api/analytics/messages", app.GetMessageAnalytics)
 	g.GET("/api/analytics/chatbot", app.GetChatbotAnalytics)
 	g.GET("/api/analytics/agents", app.GetAgentAnalytics)

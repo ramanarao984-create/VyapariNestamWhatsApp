@@ -4,12 +4,14 @@ import { useI18n } from 'vue-i18n'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Badge } from '@/components/ui/badge'
 import { TagBadge } from '@/components/ui/tag-badge'
 import { PageHeader, SearchInput, DataTable, DeleteConfirmDialog, CreateContactDialog, ImportExportDialog, IconButton, ErrorState, type Column } from '@/components/shared'
 import { contactsService, accountsService, type ImportResult } from '@/services/api'
 import { toast } from 'vue-sonner'
-import { Plus, Users, Pencil, Trash2, MessageSquare, Download } from 'lucide-vue-next'
+import { Plus, Users, Pencil, Trash2, MessageSquare, Download, SlidersHorizontal } from 'lucide-vue-next'
 import { getErrorMessage } from '@/lib/api-utils'
 import { formatDate } from '@/lib/utils'
 import { useSearchPagination } from '@/composables/useSearchPagination'
@@ -40,6 +42,11 @@ interface Contact {
   unread_count: number
   created_at: string
   updated_at: string
+  profile?: {
+    lifecycle_stage: string
+    acquisition_source: string
+    preferred_payment_mode?: string
+  }
 }
 
 const contacts = ref<Contact[]>([])
@@ -55,14 +62,35 @@ const contactToDelete = ref<Contact | null>(null)
 const sortKey = ref('last_message_at')
 const sortDirection = ref<'asc' | 'desc'>('desc')
 
-const columns = computed<Column<Contact>[]>(() => [
+const visibleColumnKeys = ref(['profile_name', 'phone_number', 'tags', 'last_message_at', 'created_at', 'actions'])
+const allColumns = computed<Column<Contact>[]>(() => [
   { key: 'profile_name', label: t('contacts.name'), sortable: true },
   { key: 'phone_number', label: t('contacts.phoneNumber'), sortable: true },
+  { key: 'patient_stage', label: t('contacts.lifecycleStage') },
+  { key: 'source', label: t('contacts.source') },
+  { key: 'payment_mode', label: t('contacts.preferredPaymentMode') },
   { key: 'tags', label: t('contacts.tags') },
   { key: 'last_message_at', label: t('contacts.lastMessage'), sortable: true },
   { key: 'created_at', label: t('contacts.created'), sortable: true },
   { key: 'actions', label: t('common.actions'), align: 'right' },
 ])
+const columns = computed(() => allColumns.value.filter(column => visibleColumnKeys.value.includes(column.key)))
+const optionalColumns = computed(() => allColumns.value.filter(column => !['profile_name', 'phone_number', 'actions'].includes(column.key)))
+
+function isColumnVisible(key: string) { return visibleColumnKeys.value.includes(key) }
+function toggleColumn(key: string) {
+  if (['profile_name', 'phone_number', 'actions'].includes(key)) return
+  visibleColumnKeys.value = isColumnVisible(key)
+    ? visibleColumnKeys.value.filter(item => item !== key)
+    : [...visibleColumnKeys.value, key]
+}
+
+function displayStage(value?: string) {
+  return ({ new_lead: 'New lead', appointment_booked: 'Booked', active_patient: 'Active patient', follow_up: 'Follow-up', inactive: 'Inactive' } as Record<string, string>)[value || ''] || '—'
+}
+function displaySource(value?: string) {
+  return ({ walk_in: 'Walk-in', whatsapp: 'WhatsApp', phone_call: 'Phone call', email: 'Email', referral: 'Referral', other: 'Other' } as Record<string, string>)[value || ''] || '—'
+}
 
 function openCreateDialog() {
   isCreateDialogOpen.value = true
@@ -184,7 +212,13 @@ function getDisplayName(contact: Contact): string {
                   <CardTitle>{{ $t('contacts.allContacts') }}</CardTitle>
                   <CardDescription>{{ $t('contacts.allContactsDesc') }}</CardDescription>
                 </div>
-                <SearchInput v-model="searchQuery" :placeholder="$t('contacts.searchContacts') + '...'" class="w-64" />
+                <div class="flex items-center gap-2">
+                  <SearchInput v-model="searchQuery" :placeholder="$t('contacts.searchContacts') + '...'" class="w-64" />
+                  <Popover>
+                    <PopoverTrigger as-child><Button variant="outline" size="icon" :aria-label="$t('contacts.chooseColumns')"><SlidersHorizontal class="h-4 w-4" /></Button></PopoverTrigger>
+                    <PopoverContent align="end" class="w-56 p-3"><p class="mb-2 text-xs font-medium text-muted-foreground">{{ $t('contacts.chooseColumns') }}</p><label v-for="column in optionalColumns" :key="column.key" class="flex cursor-pointer items-center gap-2 py-1.5 text-sm"><Checkbox :checked="isColumnVisible(column.key)" @update:checked="toggleColumn(column.key)" /><span>{{ column.label }}</span></label></PopoverContent>
+                  </Popover>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -213,6 +247,9 @@ function getDisplayName(contact: Contact): string {
                 <template #cell-phone_number="{ item: contact }">
                   <code class="text-sm">{{ contact.phone_number }}</code>
                 </template>
+                <template #cell-patient_stage="{ item: contact }"><Badge variant="secondary" class="text-xs">{{ displayStage(contact.profile?.lifecycle_stage) }}</Badge></template>
+                <template #cell-source="{ item: contact }"><span class="text-muted-foreground">{{ displaySource(contact.profile?.acquisition_source) }}</span></template>
+                <template #cell-payment_mode="{ item: contact }"><span class="text-muted-foreground">{{ contact.profile?.preferred_payment_mode?.toUpperCase() || '—' }}</span></template>
                 <template #cell-tags="{ item: contact }">
                   <div class="flex flex-wrap gap-1">
                     <TagBadge v-for="tag in (contact.tags || []).slice(0, 3)" :key="tag" color="gray" class="text-xs">{{ tag }}</TagBadge>

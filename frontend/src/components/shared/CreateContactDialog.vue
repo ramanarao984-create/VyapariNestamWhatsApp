@@ -44,16 +44,21 @@ interface ContactFormData {
     lifecycle_stage: string
     acquisition_source: string
     preferred_payment_mode: string
+    preferred_language: string
+    preferred_contact_method: string
+    preferred_visit_time: string
+    preferred_practitioner: string
     marketing_consent: boolean
   }
 }
 
 const defaultFormData: ContactFormData = {
   phone_number: '', profile_name: '', whatsapp_account: '', tags: [],
-  profile: { email: '', date_of_birth: '', gender: '', area: '', occupation: '', lifecycle_stage: 'new_lead', acquisition_source: 'walk_in', preferred_payment_mode: '', marketing_consent: false }
+  profile: { email: '', date_of_birth: '', gender: '', area: '', occupation: '', lifecycle_stage: 'new_lead', acquisition_source: 'walk_in', preferred_payment_mode: '', preferred_language: '', preferred_contact_method: '', preferred_visit_time: '', preferred_practitioner: '', marketing_consent: false }
 }
 
-const formData = ref<ContactFormData>({ ...defaultFormData })
+const formData = ref<ContactFormData>(structuredClone(defaultFormData))
+const formError = ref('')
 const isSubmitting = ref(false)
 const tagSelectorOpen = ref(false)
 const availableTags = ref<Tag[]>([])
@@ -63,6 +68,7 @@ const additionalDetailsOpen = ref(false)
 watch(() => props.open, (isOpen) => {
   if (isOpen) {
     formData.value = structuredClone(defaultFormData)
+    formError.value = ''
     additionalDetailsOpen.value = false
     fetchTags()
     fetchAccounts()
@@ -90,6 +96,8 @@ async function fetchAccounts() {
 }
 
 async function saveContact() {
+  if (isSubmitting.value) return
+  formError.value = ''
   if (!formData.value.phone_number.trim()) {
     toast.error(t('contacts.phoneRequired'))
     return
@@ -108,7 +116,7 @@ async function saveContact() {
     emit('update:open', false)
     emit('created', contact)
   } catch (error) {
-    toast.error(getErrorMessage(error, t('common.failedCreate', { resource: t('resources.contact') })))
+    formError.value = getErrorMessage(error, t('common.failedCreate', { resource: t('resources.contact') }))
   } finally {
     isSubmitting.value = false
   }
@@ -142,20 +150,20 @@ function closeDialog() {
 
 <template>
   <Dialog :open="open" @update:open="emit('update:open', $event)">
-    <DialogContent class="sm:max-w-md">
+    <DialogContent class="sm:max-w-xl">
       <DialogHeader>
         <DialogTitle>{{ $t('contacts.createTitle') }}</DialogTitle>
         <DialogDescription>{{ $t('contacts.createDesc') }}</DialogDescription>
       </DialogHeader>
       <div class="space-y-4 py-4">
         <div class="space-y-2">
-          <Label>{{ $t('contacts.phoneNumber') }} <span class="text-destructive">*</span></Label>
-          <Input v-model="formData.phone_number" :placeholder="$t('contacts.phonePlaceholder')" />
+          <Label for="field-formData-phone-number">{{ $t('contacts.phoneNumber') }} <span class="text-destructive">*</span></Label>
+          <Input id="field-formData-phone-number" type="tel" autocomplete="tel" v-model="formData.phone_number" :placeholder="$t('contacts.phonePlaceholder')" />
           <p class="text-xs text-muted-foreground">{{ $t('contacts.phoneHint') }}</p>
         </div>
         <div class="space-y-2">
-          <Label>{{ $t('contacts.profileName') }}</Label>
-          <Input v-model="formData.profile_name" :placeholder="$t('contacts.namePlaceholder')" />
+          <Label for="field-formData-profile-name">{{ $t('contacts.profileName') }}</Label>
+          <Input id="field-formData-profile-name" v-model="formData.profile_name" :placeholder="$t('contacts.namePlaceholder')" />
         </div>
         <div v-if="availableAccounts.length > 0" class="space-y-2">
           <Label>{{ $t('contacts.whatsappAccount') }}</Label>
@@ -229,19 +237,24 @@ function closeDialog() {
           <CollapsibleContent class="border-t border-border/70 px-3 pb-3 pt-3 space-y-3">
             <p class="text-xs text-muted-foreground">{{ $t('contacts.additionalDetailsHint') }}</p>
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div class="space-y-2"><Label>{{ $t('contacts.email') }}</Label><Input v-model="formData.profile.email" type="email" placeholder="name@example.com" /></div>
-              <div class="space-y-2"><Label>{{ $t('contacts.dateOfBirth') }}</Label><Input v-model="formData.profile.date_of_birth" type="date" /></div>
+              <div class="space-y-2"><Label for="field-formData-profile-email">{{ $t('contacts.email') }}</Label><Input id="field-formData-profile-email" v-model="formData.profile.email" type="email" placeholder="name@example.com" /></div>
+              <div class="space-y-2"><Label for="field-formData-profile-date-of-birth">{{ $t('contacts.dateOfBirth') }}</Label><Input id="field-formData-profile-date-of-birth" v-model="formData.profile.date_of_birth" type="date" /></div>
               <div class="space-y-2"><Label>{{ $t('contacts.gender') }}</Label><Select v-model="formData.profile.gender"><SelectTrigger><SelectValue :placeholder="$t('contacts.selectOptional')" /></SelectTrigger><SelectContent><SelectItem value="female">Female</SelectItem><SelectItem value="male">Male</SelectItem><SelectItem value="other">Other</SelectItem><SelectItem value="prefer_not_to_say">Prefer not to say</SelectItem></SelectContent></Select></div>
-              <div class="space-y-2"><Label>{{ $t('contacts.area') }}</Label><Input v-model="formData.profile.area" :placeholder="$t('contacts.areaPlaceholder')" /></div>
+              <div class="space-y-2"><Label for="field-formData-profile-area">{{ $t('contacts.area') }}</Label><Input id="field-formData-profile-area" v-model="formData.profile.area" :placeholder="$t('contacts.areaPlaceholder')" /></div>
               <div class="space-y-2"><Label>{{ $t('contacts.lifecycleStage') }}</Label><Select v-model="formData.profile.lifecycle_stage"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="new_lead">New lead</SelectItem><SelectItem value="appointment_booked">Appointment booked</SelectItem><SelectItem value="active_patient">Active patient</SelectItem><SelectItem value="follow_up">Follow-up</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent></Select></div>
               <div class="space-y-2"><Label>{{ $t('contacts.source') }}</Label><Select v-model="formData.profile.acquisition_source"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="walk_in">Walk-in</SelectItem><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="phone_call">Phone call</SelectItem><SelectItem value="email">Email</SelectItem><SelectItem value="referral">Referral</SelectItem><SelectItem value="other">Other</SelectItem></SelectContent></Select></div>
               <div class="space-y-2"><Label>{{ $t('contacts.preferredPaymentMode') }}</Label><Select v-model="formData.profile.preferred_payment_mode"><SelectTrigger><SelectValue :placeholder="$t('contacts.selectOptional')" /></SelectTrigger><SelectContent><SelectItem value="upi">UPI</SelectItem><SelectItem value="card">Card</SelectItem><SelectItem value="cash">Cash</SelectItem><SelectItem value="insurance">Insurance</SelectItem><SelectItem value="other">Other</SelectItem></SelectContent></Select></div>
-              <div class="space-y-2"><Label>{{ $t('contacts.occupation') }}</Label><Input v-model="formData.profile.occupation" :placeholder="$t('contacts.occupationPlaceholder')" /></div>
+              <div class="space-y-2"><Label for="field-formData-profile-occupation">{{ $t('contacts.occupation') }}</Label><Input id="field-formData-profile-occupation" v-model="formData.profile.occupation" :placeholder="$t('contacts.occupationPlaceholder')" /></div>
+              <div class="space-y-2"><Label>{{ $t('contacts.preferredLanguage') }}</Label><Select v-model="formData.profile.preferred_language"><SelectTrigger><SelectValue :placeholder="$t('contacts.selectOptional')" /></SelectTrigger><SelectContent><SelectItem value="english">English</SelectItem><SelectItem value="telugu">Telugu</SelectItem><SelectItem value="tenglish">Tenglish</SelectItem><SelectItem value="hindi">Hindi</SelectItem><SelectItem value="other">Other</SelectItem></SelectContent></Select></div>
+              <div class="space-y-2"><Label>{{ $t('contacts.preferredContactMethod') }}</Label><Select v-model="formData.profile.preferred_contact_method"><SelectTrigger><SelectValue :placeholder="$t('contacts.selectOptional')" /></SelectTrigger><SelectContent><SelectItem value="whatsapp">WhatsApp</SelectItem><SelectItem value="phone_call">Phone call</SelectItem><SelectItem value="either">Either is fine</SelectItem></SelectContent></Select></div>
+              <div class="space-y-2"><Label>{{ $t('contacts.preferredVisitTime') }}</Label><Select v-model="formData.profile.preferred_visit_time"><SelectTrigger><SelectValue :placeholder="$t('contacts.selectOptional')" /></SelectTrigger><SelectContent><SelectItem value="morning">Morning</SelectItem><SelectItem value="afternoon">Afternoon</SelectItem><SelectItem value="evening">Evening</SelectItem><SelectItem value="any">Any time</SelectItem></SelectContent></Select></div>
+              <div class="space-y-2"><Label for="field-formData-profile-preferred-practitioner">{{ $t('contacts.preferredPractitioner') }}</Label><Input id="field-formData-profile-preferred-practitioner" v-model="formData.profile.preferred_practitioner" :placeholder="$t('contacts.preferredPractitionerPlaceholder')" /></div>
             </div>
             <label class="flex items-start gap-2 rounded-lg bg-background/60 px-2 py-2 text-xs text-muted-foreground"><input v-model="formData.profile.marketing_consent" type="checkbox" class="mt-0.5 h-4 w-4" /><span>{{ $t('contacts.marketingConsent') }}</span></label>
           </CollapsibleContent>
         </Collapsible>
       </div>
+      <p v-if="formError" role="alert" class="text-sm text-destructive">{{ formError }}</p>
       <div class="flex justify-end gap-2">
         <Button variant="outline" @click="closeDialog">{{ $t('common.cancel') }}</Button>
         <Button @click="saveContact" :disabled="isSubmitting">

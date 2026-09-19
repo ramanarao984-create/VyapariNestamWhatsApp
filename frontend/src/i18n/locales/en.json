@@ -167,7 +167,9 @@
     "ssoMissingTokens": "Invalid SSO callback. Missing tokens.",
     "ssoLoginSuccess": "SSO login successful",
     "ssoLoginFailed": "Failed to complete SSO login",
-    "returnToLogin": "Return to login"
+    "returnToLogin": "Return to login",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
   },
   "resources": {
     "account": "account",
@@ -503,7 +505,13 @@
     "lifecycleStage": "Patient stage",
     "source": "How they came to us",
     "preferredPaymentMode": "Preferred payment mode",
-    "marketingConsent": "Patient has agreed to receive clinic updates on WhatsApp."
+    "preferredLanguage": "Preferred language",
+    "preferredContactMethod": "Best way to reach them",
+    "preferredVisitTime": "Preferred visit time",
+    "preferredPractitioner": "Preferred doctor / department",
+    "preferredPractitionerPlaceholder": "Optional",
+    "marketingConsent": "Patient has agreed to receive clinic updates on WhatsApp.",
+    "chooseColumns": "Choose columns"
   },
   "importExport": {
     "title": "Import/Export {resource}",
@@ -1420,10 +1428,20 @@
     "title": "Mission Control",
     "subtitle": "Your daily clinic operations workspace",
     "operationsTitle": "Start with what needs attention",
-    "operationsDescription": "Open patient conversations, manage today’s schedule, or update patient records without entering advanced setup.",
+    "operationsDescription": "Keep every conversation moving. Manage appointments, follow up with patients, and give your team a clear view of the day.",
     "openInbox": "Open inbox",
     "openClinicAssistant": "Open Clinic Assistant",
     "openContacts": "Open contacts",
+    "patientPipeline": "Patient pipeline",
+    "patientPipelineHint": "A simple view of reception demand and patient follow-up.",
+    "openPatientRecords": "Open patient records",
+    "newPatients": "New patients",
+    "whatsAppEnquiries": "WhatsApp enquiries",
+    "walkIns": "Walk-ins added",
+    "followUpQueue": "Follow-up queue",
+    "forSelectedPeriod": "Selected period",
+    "currentPatientStage": "Current patient stage",
+    "preferencesRecorded": "{count} patient record(s) include communication preferences.",
     "addWidget": "Add Widget",
     "createWidget": "Create Widget",
     "editWidget": "Edit Widget",
@@ -1517,7 +1535,11 @@
     "contacts": "Contacts",
     "analytics": "Analytics",
     "noWidgets": "No widgets yet",
-    "noWidgetsDesc": "Create your first widget to start monitoring your WhatsApp Business metrics."
+    "noWidgetsDesc": "Create your first widget to start monitoring your WhatsApp Business metrics.",
+    "patientDataUnavailable": "Patient pipeline is temporarily unavailable.",
+    "widgetsUnavailable": "Your dashboard could not load",
+    "retryDataHint": "Your saved layout is safe. Try loading it again.",
+    "widgetDataUnavailable": "Activity data could not load. Try again to see your latest numbers."
   },
   "flows": {
     "title": "WhatsApp Flows",

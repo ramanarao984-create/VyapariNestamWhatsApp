@@ -104,7 +104,7 @@ api.interceptors.response.use(
     const isAuthEndpoint = originalRequest?.url?.startsWith('/auth/')
 
     // Handle 401 errors - try to refresh token (but not for auth endpoints)
-    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true
 
       // If a refresh is already in flight, queue this request to wait for it
@@ -224,6 +224,19 @@ export const clinicService = {
   createAppointment: (data: { whatsapp_account: string; contact_id: string; practitioner_id: string; service_id?: string; starts_at: string }) => api.post<ClinicAppointment>('/clinic/appointments', data),
   rescheduleAppointment: (id: string, starts_at: string) => api.put(`/clinic/appointments/${id}/reschedule`, { starts_at }),
   cancelAppointment: (id: string, reason: string) => api.put(`/clinic/appointments/${id}/cancel`, { reason }),
+}
+
+export interface ClinicMissionKPIs {
+  new_patients: number
+  whatsapp_enquiries: number
+  walk_ins: number
+  follow_ups: number
+  preferences_recorded: number
+}
+
+export const missionControlService = {
+  getClinicKPIs: (params?: { from?: string; to?: string }) =>
+    api.get<{ kpis: ClinicMissionKPIs }>('/analytics/clinic-kpis', { params }),
 }
 
 // Generic Import/Export Service

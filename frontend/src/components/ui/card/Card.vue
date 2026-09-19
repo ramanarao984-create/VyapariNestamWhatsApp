@@ -9,7 +9,7 @@ const props = defineProps<{
 <template>
   <div
     :class="cn(
-      'rounded-xl border border-white/[0.06] bg-white/[0.02] text-card-foreground backdrop-blur-sm shadow-xl shadow-black/20 transition-all duration-300 hover:border-white/[0.15] hover:bg-white/[0.04] hover:shadow-2xl hover:shadow-emerald-500/5 light:bg-white light:border-gray-200 light:shadow-gray-200/50 light:hover:border-gray-300 light:hover:shadow-lg light:hover:shadow-gray-300/50',
+      'rounded-2xl border border-white/[0.07] bg-white/[0.035] text-card-foreground backdrop-blur-sm shadow-[0_14px_38px_-28px_rgba(0,0,0,.95)] transition-all duration-300 hover:border-emerald-300/20 hover:bg-white/[0.05] hover:shadow-[0_18px_44px_-28px_rgba(16,185,129,.22)] light:bg-white light:border-slate-200 light:shadow-[0_14px_34px_-28px_rgba(15,23,42,.28)] light:hover:border-emerald-200 light:hover:shadow-[0_18px_42px_-28px_rgba(13,148,136,.24)]',
       props.class
     )"
   >

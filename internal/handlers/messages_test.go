@@ -1038,3 +1038,19 @@ func TestResolveParams_WrongParamNames(t *testing.T) {
 	assert.Equal(t, "", result[0])
 	assert.Equal(t, "", result[1])
 }
+
+// An unavailable client should produce a failed message, never crash a worker.
+func TestApp_SendOutgoingMessage_UnavailableClient(t *testing.T) {
+ app := newTestApp(t)
+ org := testutil.CreateTestOrganization(t, app.DB)
+ account := createTestAccount(t, app, org.ID)
+ contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+ msg, err := app.SendOutgoingMessage(testutil.TestContext(t), handlers.OutgoingMessageRequest{
+  Account: account, Contact: contact, Type: models.MessageTypeText, Content: "Test only",
+ }, handlers.MessageSendOptions{Async: false})
+ require.NoError(t, err)
+ require.NotNil(t, msg)
+ var stored models.Message
+ require.NoError(t, app.DB.First(&stored, msg.ID).Error)
+ assert.Equal(t, models.MessageStatusFailed, stored.Status)
+}

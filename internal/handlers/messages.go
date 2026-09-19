@@ -156,6 +156,9 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 
 	// 2. Define the send function based on message type
 	sendFn := func(sendCtx context.Context) (string, error) {
+		if a.WhatsApp == nil {
+			return "", fmt.Errorf("WhatsApp messaging is unavailable")
+		}
 		waAccount := a.toWhatsAppAccount(req.Account)
 		rcpt := whatsapp.Recipient{Phone: req.Contact.PhoneNumber, BSUID: req.Contact.BSUID}
 

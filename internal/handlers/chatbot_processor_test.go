@@ -86,7 +86,7 @@ func TestChatbotAIAPIKey_EncryptedAtRestAndUsedDecrypted(t *testing.T) {
 
 	var rawAPIKey string
 	require.NoError(t, app.DB.Raw(
-		"SELECT ai_api_key FROM chatbot_settings WHERE organization_id = ? AND whats_app_account = ''",
+		"SELECT ai_api_key FROM chatbot_settings WHERE organization_id = ? AND whatsapp_account = ''",
 		org.ID,
 	).Row().Scan(&rawAPIKey))
 	assert.True(t, appcrypto.IsEncrypted(rawAPIKey))

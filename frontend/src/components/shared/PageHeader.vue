@@ -22,7 +22,7 @@ defineProps<{
 </script>
 
 <template>
-  <header class="border-b border-white/[0.08] light:border-gray-200 bg-[#0a0a0b]/95 light:bg-white/95 backdrop-blur">
+  <header class="premium-page-header border-b border-white/[0.08] light:border-gray-200 backdrop-blur-xl">
     <div class="flex h-16 items-center px-6">
       <RouterLink v-if="backLink" :to="backLink">
         <Button variant="ghost" size="icon" class="mr-3">

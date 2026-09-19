@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useMediaQuery } from '@vueuse/core'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -26,6 +27,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 const isCollapsed = ref(false)
 const isMobileMenuOpen = ref(false)
+const isMobileViewport = useMediaQuery('(max-width: 767px)')
 const expandedItems = ref<Record<string, boolean>>({})
 
 // Refresh user data and connect WebSocket on mount
@@ -135,7 +137,7 @@ const handleLogout = async () => {
 </script>
 
 <template>
-  <div class="flex h-screen bg-[#0a0a0b] light:bg-gray-50">
+  <div class="premium-app-shell flex h-dvh overflow-hidden">
     <!-- Skip link for accessibility -->
     <a href="#main-content" class="skip-link">{{ $t('nav.skipToMain') }}</a>
 
@@ -168,12 +170,14 @@ const handleLogout = async () => {
     <!-- Sidebar -->
     <aside
       :class="[
-        'flex flex-col border-r border-white/[0.08] light:border-gray-200 bg-[#0a0a0b] light:bg-white transition-all duration-300',
+        'premium-sidebar flex flex-col border-r border-white/[0.08] light:border-gray-200 transition-all duration-300',
         'fixed inset-y-0 left-0 z-40 md:relative',
         'transform md:transform-none',
         isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
         isCollapsed ? 'w-64 md:w-16' : 'w-64'
       ]"
+      :inert="isMobileViewport && !isMobileMenuOpen"
+      :aria-hidden="isMobileViewport && !isMobileMenuOpen"
       role="navigation"
       aria-label="Main navigation"
     >
@@ -343,7 +347,7 @@ const handleLogout = async () => {
     </aside>
 
     <!-- Main content -->
-    <main id="main-content" class="flex-1 overflow-hidden pt-12 md:pt-0 bg-[#0a0a0b] light:bg-gray-50" role="main">
+    <main id="main-content" class="flex-1 overflow-hidden pt-12 md:pt-0" role="main">
       <RouterView v-slot="{ Component, route: viewRoute }">
         <Transition name="page" mode="out-in">
           <component :is="Component" :key="viewRoute.meta.stableKey ? String(viewRoute.name) : viewRoute.path" />

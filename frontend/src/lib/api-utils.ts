@@ -99,8 +99,19 @@ export function getErrorMessage(error: unknown, defaultMessage = 'An error occur
     // Handle error array in response
     const errors = error.response?.data?.errors
     if (Array.isArray(errors) && errors.length > 0) {
-      return errors[0].message || errors[0] || defaultMessage
+      const first = errors[0]
+      if (typeof first === 'string' && first) return first
+      if (typeof first?.message === 'string' && first.message) return first.message
     }
+
+    // Keep transport details out of user-facing forms and retain their context.
+    if (!error.response) {
+      return error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT'
+        ? 'The request timed out. Please try again.'
+        : 'Unable to reach the server. Check your connection and try again.'
+    }
+    if (error.response.status === 403) return 'You do not have permission to make this change. Contact your administrator.'
+    return defaultMessage
   }
 
   // Handle standard Error object

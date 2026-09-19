@@ -31,6 +31,8 @@ func TestApp_CreateContact_WithOperationalProfile(t *testing.T) {
 			"email": "patient@example.com", "date_of_birth": "1990-01-10",
 			"area": "Kukatpally", "lifecycle_stage": "appointment_booked",
 			"acquisition_source": "walk_in", "preferred_payment_mode": "upi",
+			"preferred_language": "tenglish", "preferred_contact_method": "whatsapp",
+			"preferred_visit_time": "evening", "preferred_practitioner": "General dentistry",
 			"marketing_consent": true,
 		},
 	})
@@ -46,12 +48,15 @@ func TestApp_CreateContact_WithOperationalProfile(t *testing.T) {
 	require.NotNil(t, response.Data.Profile)
 	assert.Equal(t, "appointment_booked", response.Data.Profile.LifecycleStage)
 	assert.Equal(t, "walk_in", response.Data.Profile.AcquisitionSource)
+	assert.Equal(t, "tenglish", response.Data.Profile.PreferredLanguage)
+	assert.Equal(t, "whatsapp", response.Data.Profile.PreferredContactMethod)
 	assert.True(t, response.Data.Profile.MarketingConsent)
 	require.NotNil(t, response.Data.Profile.MarketingConsentAt)
 
 	var stored models.ContactProfile
 	require.NoError(t, app.DB.Where("organization_id = ? AND contact_id = ?", org.ID, response.Data.ID).First(&stored).Error)
 	assert.Equal(t, "patient@example.com", stored.Email)
+	assert.Equal(t, "General dentistry", stored.PreferredPractitioner)
 }
 
 func TestApp_CreateContact_RejectsInvalidOperationalProfile(t *testing.T) {

@@ -49,16 +49,20 @@ type ContactResponse struct {
 
 // ContactProfileResponse intentionally contains only non-clinical CRM fields.
 type ContactProfileResponse struct {
-	Email                string     `json:"email,omitempty"`
-	DateOfBirth          *time.Time `json:"date_of_birth,omitempty"`
-	Gender               string     `json:"gender,omitempty"`
-	Area                 string     `json:"area,omitempty"`
-	Occupation           string     `json:"occupation,omitempty"`
-	LifecycleStage       string     `json:"lifecycle_stage"`
-	AcquisitionSource    string     `json:"acquisition_source"`
-	PreferredPaymentMode string     `json:"preferred_payment_mode,omitempty"`
-	MarketingConsent     bool       `json:"marketing_consent"`
-	MarketingConsentAt   *time.Time `json:"marketing_consent_at,omitempty"`
+	Email                  string     `json:"email,omitempty"`
+	DateOfBirth            *time.Time `json:"date_of_birth,omitempty"`
+	Gender                 string     `json:"gender,omitempty"`
+	Area                   string     `json:"area,omitempty"`
+	Occupation             string     `json:"occupation,omitempty"`
+	LifecycleStage         string     `json:"lifecycle_stage"`
+	AcquisitionSource      string     `json:"acquisition_source"`
+	PreferredPaymentMode   string     `json:"preferred_payment_mode,omitempty"`
+	PreferredLanguage      string     `json:"preferred_language,omitempty"`
+	PreferredContactMethod string     `json:"preferred_contact_method,omitempty"`
+	PreferredVisitTime     string     `json:"preferred_visit_time,omitempty"`
+	PreferredPractitioner  string     `json:"preferred_practitioner,omitempty"`
+	MarketingConsent       bool       `json:"marketing_consent"`
+	MarketingConsentAt     *time.Time `json:"marketing_consent_at,omitempty"`
 }
 
 // MessageResponse represents a message for the frontend
@@ -1364,15 +1368,19 @@ type CreateContactRequest struct {
 // context. Clinical notes and payment transaction details belong in dedicated,
 // role-protected modules and are rejected by omission from this contract.
 type ContactProfileInput struct {
-	Email                string `json:"email"`
-	DateOfBirth          string `json:"date_of_birth"`
-	Gender               string `json:"gender"`
-	Area                 string `json:"area"`
-	Occupation           string `json:"occupation"`
-	LifecycleStage       string `json:"lifecycle_stage"`
-	AcquisitionSource    string `json:"acquisition_source"`
-	PreferredPaymentMode string `json:"preferred_payment_mode"`
-	MarketingConsent     bool   `json:"marketing_consent"`
+	Email                  string `json:"email"`
+	DateOfBirth            string `json:"date_of_birth"`
+	Gender                 string `json:"gender"`
+	Area                   string `json:"area"`
+	Occupation             string `json:"occupation"`
+	LifecycleStage         string `json:"lifecycle_stage"`
+	AcquisitionSource      string `json:"acquisition_source"`
+	PreferredPaymentMode   string `json:"preferred_payment_mode"`
+	PreferredLanguage      string `json:"preferred_language"`
+	PreferredContactMethod string `json:"preferred_contact_method"`
+	PreferredVisitTime     string `json:"preferred_visit_time"`
+	PreferredPractitioner  string `json:"preferred_practitioner"`
+	MarketingConsent       bool   `json:"marketing_consent"`
 }
 
 func validateContactProfileInput(input *ContactProfileInput) (*models.ContactProfile, error) {
@@ -1380,14 +1388,18 @@ func validateContactProfileInput(input *ContactProfileInput) (*models.ContactPro
 		return nil, nil
 	}
 	profile := &models.ContactProfile{
-		Email:                strings.TrimSpace(input.Email),
-		Gender:               strings.TrimSpace(strings.ToLower(input.Gender)),
-		Area:                 strings.TrimSpace(input.Area),
-		Occupation:           strings.TrimSpace(input.Occupation),
-		LifecycleStage:       strings.TrimSpace(strings.ToLower(input.LifecycleStage)),
-		AcquisitionSource:    strings.TrimSpace(strings.ToLower(input.AcquisitionSource)),
-		PreferredPaymentMode: strings.TrimSpace(strings.ToLower(input.PreferredPaymentMode)),
-		MarketingConsent:     input.MarketingConsent,
+		Email:                  strings.TrimSpace(input.Email),
+		Gender:                 strings.TrimSpace(strings.ToLower(input.Gender)),
+		Area:                   strings.TrimSpace(input.Area),
+		Occupation:             strings.TrimSpace(input.Occupation),
+		LifecycleStage:         strings.TrimSpace(strings.ToLower(input.LifecycleStage)),
+		AcquisitionSource:      strings.TrimSpace(strings.ToLower(input.AcquisitionSource)),
+		PreferredPaymentMode:   strings.TrimSpace(strings.ToLower(input.PreferredPaymentMode)),
+		PreferredLanguage:      strings.TrimSpace(strings.ToLower(input.PreferredLanguage)),
+		PreferredContactMethod: strings.TrimSpace(strings.ToLower(input.PreferredContactMethod)),
+		PreferredVisitTime:     strings.TrimSpace(strings.ToLower(input.PreferredVisitTime)),
+		PreferredPractitioner:  strings.TrimSpace(input.PreferredPractitioner),
+		MarketingConsent:       input.MarketingConsent,
 	}
 	if profile.Email != "" {
 		if _, err := mail.ParseAddress(profile.Email); err != nil {
@@ -1398,7 +1410,7 @@ func validateContactProfileInput(input *ContactProfileInput) (*models.ContactPro
 		value string
 		max   int
 	}{
-		"email": {profile.Email, 255}, "area": {profile.Area, 255}, "occupation": {profile.Occupation, 255},
+		"email": {profile.Email, 255}, "area": {profile.Area, 255}, "occupation": {profile.Occupation, 255}, "preferred_practitioner": {profile.PreferredPractitioner, 255},
 	} {
 		if len(value.value) > value.max {
 			return nil, fmt.Errorf("%s is too long", field)
@@ -1425,6 +1437,15 @@ func validateContactProfileInput(input *ContactProfileInput) (*models.ContactPro
 	}
 	if profile.PreferredPaymentMode != "" && !allowedContactProfileValue(profile.PreferredPaymentMode, "upi", "card", "cash", "insurance", "other") {
 		return nil, fmt.Errorf("preferred_payment_mode is invalid")
+	}
+	if profile.PreferredLanguage != "" && !allowedContactProfileValue(profile.PreferredLanguage, "english", "telugu", "tenglish", "hindi", "other") {
+		return nil, fmt.Errorf("preferred_language is invalid")
+	}
+	if profile.PreferredContactMethod != "" && !allowedContactProfileValue(profile.PreferredContactMethod, "whatsapp", "phone_call", "either") {
+		return nil, fmt.Errorf("preferred_contact_method is invalid")
+	}
+	if profile.PreferredVisitTime != "" && !allowedContactProfileValue(profile.PreferredVisitTime, "morning", "afternoon", "evening", "any") {
+		return nil, fmt.Errorf("preferred_visit_time is invalid")
 	}
 	return profile, nil
 }
@@ -1457,10 +1478,14 @@ func saveContactProfile(db *gorm.DB, organizationID, contactID uuid.UUID, profil
 			"email": profile.Email, "date_of_birth": profile.DateOfBirth,
 			"gender": profile.Gender, "area": profile.Area,
 			"occupation": profile.Occupation, "lifecycle_stage": profile.LifecycleStage,
-			"acquisition_source":     profile.AcquisitionSource,
-			"preferred_payment_mode": profile.PreferredPaymentMode,
-			"marketing_consent":      profile.MarketingConsent,
-			"marketing_consent_at":   profile.MarketingConsentAt,
+			"acquisition_source":       profile.AcquisitionSource,
+			"preferred_payment_mode":   profile.PreferredPaymentMode,
+			"preferred_language":       profile.PreferredLanguage,
+			"preferred_contact_method": profile.PreferredContactMethod,
+			"preferred_visit_time":     profile.PreferredVisitTime,
+			"preferred_practitioner":   profile.PreferredPractitioner,
+			"marketing_consent":        profile.MarketingConsent,
+			"marketing_consent_at":     profile.MarketingConsentAt,
 		}).Error
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -1773,10 +1798,14 @@ func (a *App) buildContactResponse(contact *models.Contact, orgID uuid.UUID) Con
 			Email: contact.Profile.Email, DateOfBirth: contact.Profile.DateOfBirth,
 			Gender: contact.Profile.Gender, Area: contact.Profile.Area,
 			Occupation: contact.Profile.Occupation, LifecycleStage: contact.Profile.LifecycleStage,
-			AcquisitionSource:    contact.Profile.AcquisitionSource,
-			PreferredPaymentMode: contact.Profile.PreferredPaymentMode,
-			MarketingConsent:     contact.Profile.MarketingConsent,
-			MarketingConsentAt:   contact.Profile.MarketingConsentAt,
+			AcquisitionSource:      contact.Profile.AcquisitionSource,
+			PreferredPaymentMode:   contact.Profile.PreferredPaymentMode,
+			PreferredLanguage:      contact.Profile.PreferredLanguage,
+			PreferredContactMethod: contact.Profile.PreferredContactMethod,
+			PreferredVisitTime:     contact.Profile.PreferredVisitTime,
+			PreferredPractitioner:  contact.Profile.PreferredPractitioner,
+			MarketingConsent:       contact.Profile.MarketingConsent,
+			MarketingConsentAt:     contact.Profile.MarketingConsentAt,
 		}
 	}
 	return response

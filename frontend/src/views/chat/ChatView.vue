@@ -1624,11 +1624,11 @@ async function sendMediaMessage() {
 </script>
 
 <template>
-  <div class="flex h-full bg-[#0a0a0b] light:bg-gray-50">
+  <div class="premium-page flex h-full">
     <!-- Contacts List -->
-    <div class="w-80 border-r border-white/[0.08] light:border-gray-200 flex flex-col bg-[#0a0a0b] light:bg-white">
+    <div class="premium-inset w-80 border-r flex flex-col">
       <!-- Search Header -->
-      <div class="p-2 border-b border-white/[0.08] light:border-gray-200">
+      <div class="premium-toolbar p-2 border-b backdrop-blur-xl">
         <div class="flex items-center gap-2">
           <div class="relative flex-1">
             <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/40 light:text-gray-400" />
@@ -1728,8 +1728,8 @@ async function sendMediaMessage() {
             v-for="contact in contactsStore.sortedContacts"
             :key="contact.id"
             :class="[
-              'flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white/[0.04] light:hover:bg-gray-50 transition-colors',
-              contactsStore.currentContact?.id === contact.id && 'bg-white/[0.08] light:bg-gray-100'
+              'premium-list-item flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors',
+              contactsStore.currentContact?.id === contact.id && 'premium-list-item--active'
             ]"
             @click="handleContactClick(contact)"
           >
@@ -1776,7 +1776,7 @@ async function sendMediaMessage() {
     </div>
 
     <!-- Chat Area -->
-    <div class="flex-1 flex flex-col bg-[#0f0f10] light:bg-gray-50">
+    <div class="flex-1 flex flex-col bg-background/45">
       <!-- No Contact Selected -->
       <div
         v-if="!contactsStore.currentContact"
@@ -1794,7 +1794,7 @@ async function sendMediaMessage() {
       <!-- Chat Interface -->
       <template v-else>
         <!-- Chat Header -->
-        <div class="h-14 flex-shrink-0 px-4 border-b border-white/[0.08] light:border-gray-200 flex items-center justify-between bg-[#0f0f10] light:bg-white">
+        <div class="premium-toolbar h-14 flex-shrink-0 px-4 border-b flex items-center justify-between backdrop-blur-xl">
           <div class="flex items-center gap-2">
             <Avatar class="h-8 w-8 ring-2 ring-white/[0.1] light:ring-gray-200">
               <AvatarImage :src="contactsStore.currentContact.avatar_url" />
